@@ -15,7 +15,7 @@ class MineChatLoader : PluginLoader {
         val resolver = MavenLibraryResolver().apply {
             addDependency(Dependency(DefaultArtifact("com.github.ben-manes.caffeine:caffeine:$caffeineVersion"), null))
             addRepository(
-                RemoteRepository.Builder("maven-central", "default", "https://repo1.maven.org/maven2/")
+                RemoteRepository.Builder("maven-central", "default", MavenLibraryResolver.MAVEN_CENTRAL_DEFAULT_MIRROR)
                     .build()
             )
         }
