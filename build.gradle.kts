@@ -52,7 +52,6 @@ repositories {
         url = uri("https://repo.papermc.io/repository/maven-public/")
         content {
             includeModule("io.papermc.paper", "paper-api")
-            includeModule("io.papermc", "paperlib")
             includeModule("net.md-5", "bungeecord-chat")
         }
     }
@@ -65,7 +64,7 @@ repositories {
     }
 
     maven {
-        url = uri("https://libraries.minecraft.net")
+        url = uri("https://maven.winlogon.org/releases")
     }
 
     mavenCentral()
@@ -73,8 +72,7 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")
-    compileOnly("net.kyori:adventure-text-serializer-plain:4.19.0")
-    compileOnly("com.mojang:brigadier:1.1.8")
+    compileOnly("org.winlogon:asynccraftr:0.1.1")
     compileOnly("com.github.ben-manes.caffeine:caffeine:3.2.0")
     
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
