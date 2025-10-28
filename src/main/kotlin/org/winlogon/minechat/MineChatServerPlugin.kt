@@ -28,6 +28,9 @@ import java.util.concurrent.TimeUnit
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 
+import com.charleskorn.kaml.Yaml
+import kotlinx.serialization.decodeFromString
+
 class MineChatServerPlugin : JavaPlugin() {
     private var serverSocket: ServerSocket? = null
     private val connectedClients = ConcurrentLinkedQueue<ClientConnection>()
@@ -37,12 +40,21 @@ class MineChatServerPlugin : JavaPlugin() {
     private lateinit var boxStore: BoxStore
     private var isFolia = false
 
-    private var port: Int = 25575
-    private var expiryCodeMs = 300_000 // 5 minutes
+    private lateinit var mineChatConfig: MineChatConfig
     private var serverThread: Thread? = null
     @Volatile private var isServerRunning = false
     private val executorService = Executors.newVirtualThreadPerTaskExecutor()
     val miniMessage = MiniMessage.miniMessage()
+
+    private fun loadConfig(): MineChatConfig {
+        val configFile = java.io.File(dataFolder, "config.yml")
+        return try {
+            Yaml.default.decodeFromString(configFile.readText())
+        } catch (e: Exception) {
+            logger.severe("Failed to load config.yml: ${e.message}. Using default config.")
+            MineChatConfig()
+        }
+    }
 
     private fun generateLinkCode(): String {
         val chars = ('A'..'Z') + ('0'..'9')
@@ -60,12 +72,12 @@ class MineChatServerPlugin : JavaPlugin() {
             code = code,
             minecraftUuid = player.uniqueId,
             minecraftUsername = player.name,
-            expiresAt = System.currentTimeMillis() + expiryCodeMs
+            expiresAt = System.currentTimeMillis() + (mineChatConfig.expiryCodeMinutes * 60_000L)
         )
         linkCodeStorage.add(link)
 
         val codeComponent = Component.text(code, NamedTextColor.DARK_AQUA)
-        val timeComponent = Component.text("${expiryCodeMs / 60000} minutes", NamedTextColor.DARK_GREEN)
+        val timeComponent = Component.text("${mineChatConfig.expiryCodeMinutes} minutes", NamedTextColor.DARK_GREEN)
         player.sendRichMessage(
             "<gray>Your link code is: </gray><code>. Use it in the client within <deadline>",
             Placeholder.component("code", codeComponent),
@@ -87,8 +99,7 @@ class MineChatServerPlugin : JavaPlugin() {
             .requires { sender -> sender.sender.hasPermission("minechat.reload") }
             .executes { ctx ->
                 reloadConfig()
-                port = config.getInt("port", 25575)
-                expiryCodeMs = config.getInt("expiry-code-minutes", 5) * 60_000
+                mineChatConfig = loadConfig()
                 ctx.source.sender.sendMessage(Component.text("MineChat config reloaded.").color(NamedTextColor.GREEN))
                 Command.SINGLE_SUCCESS
             }
@@ -161,9 +172,7 @@ class MineChatServerPlugin : JavaPlugin() {
 
         saveResource("config.yml", false)
         reloadConfig()
-
-        port = config.getInt("port", 25575)
-        expiryCodeMs = config.getInt("expiry-code-minutes", 5) * 60_000
+        mineChatConfig = loadConfig()
 
         dataFolder.mkdirs()
 
@@ -182,7 +191,7 @@ class MineChatServerPlugin : JavaPlugin() {
 
             if (!keystoreFile.exists()) {
                 logger.severe("Keystore file not found at ${keystoreFile.absolutePath}. Disabling TLS.")
-                serverSocket = ServerSocket(port)
+                serverSocket = ServerSocket(mineChatConfig.port)
             } else {
                 try {
                     val keyStore = KeyStore.getInstance("JKS")
@@ -195,17 +204,17 @@ class MineChatServerPlugin : JavaPlugin() {
                     sslContext.init(keyManagerFactory.keyManagers, null, null)
 
                     val sslServerSocketFactory = sslContext.serverSocketFactory
-                    serverSocket = sslServerSocketFactory.createServerSocket(port)
-                    logger.info("MineChat server started with TLS on port $port")
+                    serverSocket = sslServerSocketFactory.createServerSocket(mineChatConfig.port)
+                    logger.info("MineChat server started with TLS on port ${mineChatConfig.port}")
                 } catch (e: Exception) {
                     logger.severe("Failed to initialize TLS: ${e.message}. Falling back to plain socket.")
                     e.printStackTrace()
-                    serverSocket = ServerSocket(port)
+                    serverSocket = ServerSocket(mineChatConfig.port)
                 }
             }
         } else {
-            serverSocket = ServerSocket(port)
-            logger.info("Starting MineChat server on port $port")
+            serverSocket = ServerSocket(mineChatConfig.port)
+            logger.info("Starting MineChat server on port ${mineChatConfig.port}")
         }
 
         isServerRunning = true

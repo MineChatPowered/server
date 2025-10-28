@@ -14,6 +14,7 @@ buildscript {
 plugins {
     id("com.gradleup.shadow") version "8.3.6"
     kotlin("jvm") version "2.1.10"
+    kotlin("plugin.serialization") version "2.1.10"
 }
 
 apply(plugin = "io.objectbox")
@@ -92,6 +93,8 @@ dependencies {
     compileOnly("com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:2.17.1")
     compileOnly("com.github.luben:zstd-jni:1.5.6-1")
     compileOnly("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:" + libs.versions.kotlinx.serialization.json.get())
+    implementation("com.charleskorn.kaml:kaml:" + libs.versions.kaml.get())
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
     testImplementation("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")
