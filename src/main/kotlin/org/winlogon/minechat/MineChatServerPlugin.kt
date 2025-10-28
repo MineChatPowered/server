@@ -69,7 +69,7 @@ class MineChatServerPlugin : JavaPlugin() {
         player.sendRichMessage(
             "<gray>Your link code is: </gray><code>. Use it in the client within <deadline>",
             Placeholder.component("code", codeComponent),
-            Placeholder.component("deadline", timeComponent))
+            Placeholder.component("deadline", timeComponent)
         )
     }
 
