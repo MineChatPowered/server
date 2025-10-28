@@ -6,4 +6,12 @@
  * This project uses @Incubating APIs which are subject to change.
  */
 
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+        maven { url = uri("https://download.objectbox.io/maven") }
+    }
+}
+
 rootProject.name = "MineChat"

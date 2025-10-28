@@ -1,34 +1,30 @@
+package org.winlogon.minechat
 
-class ClientStorage(private val dataFolder: File, private val gson: Gson) {
-    private val file = File(dataFolder, "clients.json")
-    private val clientCache = Caffeine.newBuilder().build<String, Client>().asMap()
-    private var isDirty = AtomicBoolean(false)
+import io.objectbox.Box
+import io.objectbox.BoxStore
 
-    fun find(clientUuid: String): Client? = clientCache[clientUuid]
+class ClientStorage(boxStore: BoxStore) {
+    private val clientBox: Box<Client> = boxStore.boxFor(Client::class.java)
+
+    fun find(clientUuid: String?, minecraftUsername: String?): Client? {
+        if (clientUuid != null) {
+            return clientBox.query(Client_.clientUuid.equal(clientUuid)).build().findFirst()
+        }
+        if (minecraftUsername != null) {
+            return clientBox.query(Client_.minecraftUsername.equal(minecraftUsername)).build().findFirst()
+        }
+        return null
+    }
 
     fun add(client: Client) {
-        clientCache[client.clientUuid] = client
-        isDirty.set(true)
-    }
-
-    fun load() {
-        if (!file.exists()) {
-            file.writeText("[]")
-            return
+        // Check if a client with the same minecraft username already exists
+        val existing = find(null, client.minecraftUsername)
+        if (existing != null) {
+            // Update existing client's uuid
+            existing.clientUuid = client.clientUuid
+            clientBox.put(existing)
+        } else {
+            clientBox.put(client)
         }
-        val json = file.readText()
-        if (json.isNotBlank()) {
-            val type = object : TypeToken<List<Client>>() {}.type
-            val clients: List<Client> = gson.fromJson(json, type)
-            clientCache.putAll(clients.associateBy { it.clientUuid })
-        }
-        isDirty.set(false)
-    }
-
-    fun save() {
-        if (!isDirty.get()) return
-        val clients = clientCache.values.toList()
-        file.writeText(gson.toJson(clients))
-        isDirty.set(false)
     }
 }

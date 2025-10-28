@@ -1,53 +1,39 @@
-class LinkCodeStorage(private val dataFolder: File, private val gson: Gson) {
-    private val file = File(dataFolder, "link_codes.json")
-    private val linkCodeCache = Caffeine.newBuilder().build<String, LinkCode>().asMap()
-    private var isDirty = AtomicBoolean(false)
+package org.winlogon.minechat
 
-    fun add(linkCode: LinkCode) {
-        linkCodeCache[linkCode.code] = linkCode
-        isDirty.set(true)
+import io.objectbox.Box
+import io.objectbox.BoxStore
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+
+class LinkCodeStorage(private val boxStore: BoxStore) {
+    private val linkCodeBox: Box<LinkCode> = boxStore.boxFor(LinkCode::class.java)
+    private val scheduler = Executors.newSingleThreadScheduledExecutor()
+
+    init {
+        // Schedule cleanup of expired link codes every minute
+        scheduler.scheduleAtFixedRate({
+            cleanupExpired()
+        }, 0, 1, TimeUnit.MINUTES)
     }
 
-    fun find(code: String): LinkCode? = linkCodeCache[code]
+    fun add(linkCode: LinkCode) {
+        linkCodeBox.put(linkCode)
+    }
+
+    fun find(code: String): LinkCode? {
+        return linkCodeBox.query(LinkCode_.code.equal(code)).build().findFirst()
+    }
 
     fun remove(code: String) {
-        linkCodeCache.remove(code)
-        isDirty.set(true)
+        linkCodeBox.query(LinkCode_.code.equal(code)).build().remove()
     }
 
     fun cleanupExpired() {
         val now = System.currentTimeMillis()
-        var modified = false
-        val iterator = linkCodeCache.iterator()
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            if (entry.value.expiresAt <= now) {
-                iterator.remove()
-                modified = true
-            }
-        }
-        if (modified) isDirty.set(true)
+        linkCodeBox.query(LinkCode_.expiresAt.less(now)).build().remove()
     }
 
-    fun load() {
-        if (!file.exists()) {
-            file.writeText("[]")
-            return
-        }
-        val json = file.readText()
-        if (json.isNotBlank()) {
-            val type = object : TypeToken<List<LinkCode>>() {}.type
-            val codes: List<LinkCode> = gson.fromJson(json, type)
-            linkCodeCache.putAll(codes.associateBy { it.code })
-        }
-        isDirty.set(false)
-    }
-
-    fun save() {
-        if (!isDirty.get()) return
-        val codes = linkCodeCache.values.toList()
-        file.writeText(gson.toJson(codes))
-        isDirty.set(false)
+    fun close() {
+        scheduler.shutdown()
     }
 }
-

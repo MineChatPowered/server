@@ -1,10 +1,22 @@
 import java.text.SimpleDateFormat
 import java.util.*
 
+buildscript {
+    repositories {
+        mavenCentral()
+        maven { url = uri("https://download.objectbox.io/maven") }
+    }
+    dependencies {
+        classpath("io.objectbox:objectbox-gradle-plugin:3.8.0")
+    }
+}
+
 plugins {
     id("com.gradleup.shadow") version "8.3.6"
     kotlin("jvm") version "2.1.10"
 }
+
+apply(plugin = "io.objectbox")
 
 group = "org.winlogon.minechat"
 
@@ -72,9 +84,15 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")
-    compileOnly("org.winlogon:asynccraftr:0.1.1")
+    compileOnly("org.winlogon:asynccraftr:0.1.0")
     compileOnly("com.github.ben-manes.caffeine:caffeine:3.2.0")
-    
+    compileOnly("com.google.code.gson:gson:2.11.0")
+    compileOnly("io.objectbox:objectbox-kotlin:3.8.0")
+    compileOnly("org.jetbrains.kotlin:kotlin-reflect:2.1.10")
+    compileOnly("com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:2.17.1")
+    compileOnly("com.github.luben:zstd-jni:1.5.6-1")
+    compileOnly("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.1")
+
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
     testImplementation("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
