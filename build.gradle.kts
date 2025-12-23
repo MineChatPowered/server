@@ -12,9 +12,9 @@ buildscript {
 }
 
 plugins {
-    id("com.gradleup.shadow") version "8.3.6"
-    kotlin("jvm") version "2.1.10"
-    kotlin("plugin.serialization") version "2.1.10"
+    id("com.gradleup.shadow") version "9.3.0"
+    kotlin("jvm") version "2.3.0"
+    kotlin("plugin.serialization") version "2.3.0"
 }
 
 apply(plugin = "io.objectbox")
@@ -153,5 +153,11 @@ tasks.register("release") {
                 file("${layout.buildDirectory.get()}/libs/${rootProject.name}.jar")
             )
         }
+    }
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        freeCompilerArgs.add("-Xannotation-default-target=param-property")
     }
 }
