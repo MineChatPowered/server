@@ -71,8 +71,8 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
 
     override fun onLoad() {
         permissions = mapOf(
-            "reload" to Permission("minechat.reload"),
-            "ban" to Permission("minechat.ban"),
+            "reload" to Permission("minechat.reload", "Reloads the MineChat configuration."),
+            "ban" to Permission("minechat.ban", "Bans a player from the MineChat server."),
         )
         Bukkit.getPluginManager().addPermissions(permissions.values.toList())
     }
