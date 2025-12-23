@@ -3,6 +3,7 @@ package org.winlogon.minechat
 import io.objectbox.annotation.Convert
 import io.objectbox.annotation.Entity
 import io.objectbox.annotation.Id
+
 import java.util.UUID
 
 @Entity

@@ -2,6 +2,7 @@ package org.winlogon.minechat
 
 import io.objectbox.Box
 import io.objectbox.BoxStore
+
 import java.util.UUID
 
 class BanStorage(boxStore: BoxStore) {
