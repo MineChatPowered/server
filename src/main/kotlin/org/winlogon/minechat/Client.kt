@@ -11,5 +11,6 @@ data class Client(
     var clientUuid: String = "",
     @Convert(converter = UuidConverter::class, dbType = String::class)
     var minecraftUuid: UUID? = null,
-    var minecraftUsername: String = ""
+    var minecraftUsername: String = "",
+    var supportsComponents: Boolean = false
 )

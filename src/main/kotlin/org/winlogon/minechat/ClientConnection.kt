@@ -13,7 +13,9 @@ import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 
 import org.bukkit.Bukkit
+import org.bukkit.plugin.java.JavaPlugin.getPlugin
 
+import java.util.logging.Logger
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.Socket
@@ -23,6 +25,7 @@ class ClientConnection(
     private val plugin: MineChatServerPlugin,
     private val miniMessage: MiniMessage
 ) : Runnable {
+    private val logger = plugin.logger
     object ChatGradients {
         val JOIN = Pair("#27AE60", "#2ECC71")
         val LEAVE = Pair("#C0392B", "#E74C3C")
@@ -32,8 +35,7 @@ class ClientConnection(
 
     companion object {
         const val MINECHAT_PREFIX_STRING = "&8[&3MineChat&8]"
-        val MINECHAT_PREFIX_COMPONENT: Component =
-            LegacyComponentSerializer.legacyAmpersand().deserialize(MINECHAT_PREFIX_STRING)
+        val MINECHAT_PREFIX_COMPONENT: Component = LegacyComponentSerializer.legacyAmpersand().deserialize(MINECHAT_PREFIX_STRING)
     }
 
     private val cborMapper = ObjectMapper(CBORFactory()).registerModule(KotlinModule.Builder().build())
@@ -52,22 +54,62 @@ class ClientConnection(
 
     override fun run() {
         try {
-            while (running) {
-                val decompressedLen = reader.readInt()
-                if (decompressedLen <= 0) continue
-                val compressedLen = reader.readInt()
-                if (compressedLen <= 0) continue
+                        while (running) {
+                            val decompressedLen = reader.readInt()
+                            if (decompressedLen <= 0) {
+                                logger.warning("Received non-positive decompressed length: $decompressedLen. Terminating connection.")
+                                break // Terminate connection
+                            }
+                            logger.fine("Received decompressedLen: $decompressedLen")
+            
+                            val compressedLen = reader.readInt()
+                            if (compressedLen <= 0) {
+                                logger.warning("Received non-positive compressed length: $compressedLen. Terminating connection.")
+                                break // Terminate connection
+                            }
+                            logger.fine("Received compressedLen: $compressedLen")
+            
 
                 val compressed = ByteArray(compressedLen)
                 reader.readFully(compressed)
 
                 val decompressed = Zstd.decompress(compressed, decompressedLen)
-                val json = cborMapper.readValue(decompressed, Map::class.java) as Map<String, Any>
+                if (decompressed.size != decompressedLen) {
+                    logger.warning("Decompressed size mismatch. Expected $decompressedLen, got ${decompressed.size}. Terminating connection.")
+                    break // Terminate connection
+                }
 
-                when (json["type"] as String) {
-                    "AUTH" -> handleAuth(json["payload"] as Map<String, Any>)
-                    "CHAT" -> handleChat(json["payload"] as Map<String, Any>)
-                    "DISCONNECT" -> break
+
+                val mineChatPacket = cborMapper.readValue(decompressed, MineChatPacket::class.java)
+                logger.fine("Received MineChatPacket: $mineChatPacket")
+
+                when (mineChatPacket.packetType) {
+                    PacketTypes.LINK -> {
+                        val payload = cborMapper.convertValue(mineChatPacket.payload, LinkPayload::class.java)
+                        logger.fine("Received LINK message: $payload")
+                        handleAuth(payload)
+                    }
+                    PacketTypes.CAPABILITIES -> {
+                        val payload = cborMapper.convertValue(mineChatPacket.payload, CapabilitiesPayload::class.java)
+                        logger.fine("Received CAPABILITIES message: $payload")
+                        handleCapabilities(payload)
+                    }
+                    PacketTypes.CHAT_MESSAGE -> {
+                        val payload = cborMapper.convertValue(mineChatPacket.payload, ChatMessagePayload::class.java)
+                        logger.fine("Received CHAT_MESSAGE message: $payload")
+                        handleChat(payload)
+                    }
+                    PacketTypes.PING -> {
+                        val payload = cborMapper.convertValue(mineChatPacket.payload, PingPayload::class.java)
+                        logger.fine("Received PING message: $payload")
+                        handlePing(payload)
+                    }
+                    PacketTypes.PONG -> {
+                        val payload = cborMapper.convertValue(mineChatPacket.payload, PongPayload::class.java)
+                        logger.fine("Received PONG message: $payload")
+                        handlePong(payload)
+                    }
+                    else -> plugin.logger.warning("Unknown packet type: ${mineChatPacket.packetType}")
                 }
             }
         } catch (e: Exception) {
@@ -75,16 +117,6 @@ class ClientConnection(
         } finally {
             client?.let {
                 broadcastMinecraft(ChatGradients.LEAVE, "${it.minecraftUsername} has left the chat.")
-                plugin.broadcastToClients(
-                    mapOf(
-                        "type" to "SYSTEM",
-                        "payload" to mapOf(
-                            "event" to "leave",
-                            "username" to it.minecraftUsername,
-                            "message" to "${it.minecraftUsername} has left the chat."
-                        )
-                    )
-                )
             }
             close()
             plugin.removeClient(this)
@@ -92,23 +124,23 @@ class ClientConnection(
     }
 
     private fun sendBannedMessage(ban: Ban) {
+        logger.fine("Sending banned message to client: $ban")
         disconnect(ban.reason ?: "You are banned from MineChat.")
     }
 
     fun disconnect(reason: String) {
-        sendMessage(
-            mapOf(
-                "type" to "DISCONNECT",
-                "payload" to mapOf("reason" to reason)
-            )
-        )
+        sendMessage(PacketTypes.DISCONNECT, DisconnectPayload(reason))
         close()
     }
 
-    private fun handleAuth(payload: Map<String, Any>) {
+        private fun handleAuth(payload: LinkPayload) {
+
+            logger.fine("Handling auth with payload: $payload")
+
+    
         val banStorage = plugin.getBanStorage()
-        val clientUuid = payload["client_uuid"] as String
-        val linkCode = payload["link_code"] as String
+        val clientUuid = payload.clientUuid
+        val linkCode = payload.linkingCode
 
         var ban = banStorage.getBan(clientUuid, null)
         if (ban != null) {
@@ -129,53 +161,21 @@ class ClientConnection(
                     plugin.getClientStorage().add(client)
                     plugin.getLinkCodeStorage().remove(link.code)
                     this.client = client
-                    sendMessage(
-                        mapOf(
-                            "type" to "AUTH_ACK",
-                            "payload" to mapOf(
-                                "status" to "success",
-                                "message" to "Linked to ${link.minecraftUsername}",
-                                "minecraft_uuid" to link.minecraftUuid.toString(),
-                                "username" to link.minecraftUsername
-                            )
-                        )
+                    val linkOkPayload = LinkOkPayload(
+                        minecraftUuid = link.minecraftUuid.toString()
                     )
+                    sendMessage(PacketTypes.LINK_OK, linkOkPayload)
+                    sendMessage(PacketTypes.AUTH_OK, AuthOkPayload())
                     broadcastMinecraft(
                         ChatGradients.AUTH,
                         "${link.minecraftUsername} has successfully authenticated."
                     )
-                    plugin.broadcastToClients(
-                        mapOf(
-                            "type" to "SYSTEM",
-                            "payload" to mapOf(
-                                "event" to "join",
-                                "username" to link.minecraftUsername,
-                                "message" to "${link.minecraftUsername} has joined the chat."
-                            )
-                        )
-                    )
+
                 } else {
-                    sendMessage(
-                        mapOf(
-                            "type" to "AUTH_ACK",
-                            "payload" to mapOf(
-                                "status" to "failure",
-                                "message" to "Invalid or expired link code"
-                            )
-                        )
-                    )
+                    disconnect("Invalid or expired link code")
                 }
             } else {
-                sendMessage(
-                    mapOf(
-                        "type" to "AUTH_ACK",
-                        "payload" to mapOf(
-                            "status" to "failure",
-                            "message" to "Invalid or expired link code"
-                        )
-                    )
-                )
-            }
+                            disconnect("Invalid or expired link code")            }
         } else {
             val client = plugin.getClientStorage().find(clientUuid, null)
             if (client != null) {
@@ -185,47 +185,21 @@ class ClientConnection(
                     return
                 }
                 this.client = client
-                sendMessage(
-                    mapOf(
-                        "type" to "AUTH_ACK",
-                        "payload" to mapOf(
-                            "status" to "success",
-                            "message" to "Welcome back, ${client.minecraftUsername}",
-                            "minecraft_uuid" to client.minecraftUuid.toString(),
-                            "username" to client.minecraftUsername
-                        )
-                    )
-                )
-                broadcastMinecraft(ChatGradients.JOIN, "${client.minecraftUsername} has joined the chat.")
-                plugin.broadcastToClients(
-                    mapOf(
-                        "type" to "SYSTEM",
-                        "payload" to mapOf(
-                            "event" to "join",
-                            "username" to client.minecraftUsername,
-                            "message" to "${client.minecraftUsername} has joined the chat."
-                        )
-                    )
+                sendMessage(PacketTypes.AUTH_OK, AuthOkPayload())
+                broadcastMinecraft(
+                    ChatGradients.JOIN,
+                    "${client.minecraftUsername} has joined the chat."
                 )
             } else {
-                sendMessage(
-                    mapOf(
-                        "type" to "AUTH_ACK",
-                        "payload" to mapOf(
-                            "status" to "failure",
-                            "message" to "Client not registered"
-                        )
-                    )
-                )
+                disconnect("Client not registered")
             }
         }
     }
 
-    private fun handleChat(payload: Map<String, Any>) {
+    private fun handleChat(payload: ChatMessagePayload) {
         client?.let {
-            val messageJson = cborMapper.writeValueAsString(payload["message"])
-            val message = GsonComponentSerializer.gson().deserialize(messageJson)
-
+            // Check payload.format here if needed. Assuming "commonmark" for now.
+            val message = miniMessage.deserialize(payload.content) // Deserialize the content string to an Adventure Component
             val usernamePlaceholder = Component.text(it.minecraftUsername, NamedTextColor.DARK_GREEN)
             val formattedMsg = miniMessage.deserialize(
                 "<gray><sender><dark_gray>:</dark_gray> <message></gray>",
@@ -234,21 +208,45 @@ class ClientConnection(
             )
             val finalMsg = formatPrefixed(formattedMsg)
             Bukkit.broadcast(finalMsg)
-            plugin.broadcastToClients(
-                mapOf(
-                    "type" to "BROADCAST",
-                    "payload" to mapOf(
-                        "from" to "[MineChat] ${it.minecraftUsername}",
-                        "message" to payload["message"]!!
-                    )
-                )
+            val chatMessagePayload = ChatMessagePayload(
+                format = "commonmark",
+                content = miniMessage.serialize(message)
             )
+            plugin.broadcastToClients(PacketTypes.CHAT_MESSAGE, chatMessagePayload)
         }
     }
 
-    fun sendMessage(message: Map<String, Any>) {
+    private fun handleCapabilities(payload: CapabilitiesPayload) {
+        client?.let {
+            it.supportsComponents = payload.supportsComponents
+            plugin.getClientStorage().add(it) // Update the client in storage
+            logger.fine("Client ${it.minecraftUsername} updated with capabilities: supportsComponents=${it.supportsComponents}")
+        } ?: run {
+            logger.warning("Received CAPABILITIES packet before client was authenticated. Disconnecting.")
+            disconnect("Received CAPABILITIES before authentication.")
+        }
+    }
+
+    private fun handlePing(payload: PingPayload) {
+        // Respond with a PONG packet, echoing the timestamp
+        sendMessage(PacketTypes.PONG, PongPayload(payload.timestampMs))
+        logger.fine("Responded to PING from client with timestamp ${payload.timestampMs}")
+    }
+
+    private fun handlePong(payload: PongPayload) {
+        // For now, just log that a PONG was received.
+        // In a more advanced implementation, this would be used for RTT calculation.
+        logger.fine("Received PONG from client with timestamp ${payload.timestampMs}")
+    }
+
+    fun sendMessage(packetType: Int, payload: Any) {
+        logger.fine("Sending packet type $packetType with payload: $payload")
         try {
-            val serialized = cborMapper.writeValueAsBytes(message)
+            // Convert the payload object to a Map<Int, Any?>
+            val payloadMap = cborMapper.convertValue(payload, Map::class.java) as Map<Int, Any?>
+            val mineChatPacket = MineChatPacket(packetType, payloadMap)
+
+            val serialized = cborMapper.writeValueAsBytes(mineChatPacket)
             val compressed = Zstd.compress(serialized)
             writer.writeInt(serialized.size)
             writer.writeInt(compressed.size)

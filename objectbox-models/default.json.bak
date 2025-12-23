@@ -78,7 +78,7 @@
     },
     {
       "id": "3:2018865171595602336",
-      "lastPropertyId": "5:6963362824776171892",
+      "lastPropertyId": "4:516704796771639505",
       "name": "Client",
       "properties": [
         {
@@ -101,11 +101,6 @@
           "id": "4:516704796771639505",
           "name": "minecraftUsername",
           "type": 9
-        },
-        {
-          "id": "5:6963362824776171892",
-          "name": "supportsComponents",
-          "type": 1
         }
       ],
       "relations": []

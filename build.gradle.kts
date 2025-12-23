@@ -84,17 +84,22 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")
-    compileOnly("org.winlogon:asynccraftr:0.1.0")
     compileOnly("com.github.ben-manes.caffeine:caffeine:3.2.0")
-    compileOnly("com.google.code.gson:gson:2.11.0")
-    compileOnly("io.objectbox:objectbox-kotlin:3.8.0")
-    compileOnly("org.jetbrains.kotlin:kotlin-reflect:2.1.10")
-    compileOnly("com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:2.17.1")
     compileOnly("com.github.luben:zstd-jni:1.5.6-1")
-    compileOnly("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:" + libs.versions.kotlinx.serialization.json.get())
+    // idt this is needed
+    // compileOnly("com.google.code.gson:gson:2.11.0")
+    compileOnly("io.objectbox:objectbox-kotlin:3.8.0")
+    compileOnly("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")
+    // is this needed?
+    compileOnly("org.jetbrains.kotlin:kotlin-reflect:2.1.10")
+    compileOnly("org.winlogon:asynccraftr:0.1.0")
     implementation("com.charleskorn.kaml:kaml:" + libs.versions.kaml.get())
+
+    // Jackson
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:2.17.1")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.1")
+
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:" + libs.versions.kotlinx.serialization.json.get())
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
     testImplementation("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")

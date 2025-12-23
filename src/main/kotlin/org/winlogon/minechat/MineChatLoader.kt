@@ -3,6 +3,7 @@ package org.winlogon.minechat
 import io.papermc.paper.plugin.loader.PluginClasspathBuilder
 import io.papermc.paper.plugin.loader.PluginLoader
 import io.papermc.paper.plugin.loader.library.impl.MavenLibraryResolver
+
 import org.eclipse.aether.artifact.DefaultArtifact
 import org.eclipse.aether.graph.Dependency
 import org.eclipse.aether.repository.RemoteRepository
@@ -11,7 +12,7 @@ import java.nio.file.Path
 
 class MineChatLoader : PluginLoader {
     override fun classloader(classpathBuilder: PluginClasspathBuilder) {
-	val caffeineVersion = "3.2.0";
+    	val caffeineVersion = "3.2.0"
         val resolver = MavenLibraryResolver().apply {
             addDependency(Dependency(DefaultArtifact("com.github.ben-manes.caffeine:caffeine:$caffeineVersion"), null))
             addRepository(

@@ -1,17 +1,28 @@
 package org.winlogon.minechat
 
+import com.github.benmanes.caffeine.cache.Cache
+import com.github.benmanes.caffeine.cache.Caffeine
 import io.objectbox.Box
 import io.objectbox.BoxStore
 
 class ClientStorage(boxStore: BoxStore) {
     private val clientBox: Box<Client> = boxStore.boxFor(Client::class.java)
+    private val clientCache: Cache<String, Client> = Caffeine.newBuilder().build()
 
     fun find(clientUuid: String?, minecraftUsername: String?): Client? {
         if (clientUuid != null) {
-            return clientBox.query(Client_.clientUuid.equal(clientUuid)).build().findFirst()
+            return clientCache.getIfPresent(clientUuid) ?: run {
+                val client = clientBox.query(Client_.clientUuid.equal(clientUuid)).build().findFirst()
+                client?.let { clientCache.put(clientUuid, it) }
+                client
+            }
         }
         if (minecraftUsername != null) {
-            return clientBox.query(Client_.minecraftUsername.equal(minecraftUsername)).build().findFirst()
+            return clientCache.asMap().values.find { it.minecraftUsername == minecraftUsername } ?: run {
+                val client = clientBox.query(Client_.minecraftUsername.equal(minecraftUsername)).build().findFirst()
+                client?.let { clientCache.put(it.clientUuid, it) }
+                client
+            }
         }
         return null
     }
@@ -23,8 +34,24 @@ class ClientStorage(boxStore: BoxStore) {
             // Update existing client's uuid
             existing.clientUuid = client.clientUuid
             clientBox.put(existing)
+            clientCache.put(existing.clientUuid, existing)
         } else {
             clientBox.put(client)
+            clientCache.put(client.clientUuid, client)
+        }
+    }
+
+    fun remove(clientUuid: String?, minecraftUsername: String?) {
+        if (clientUuid != null) {
+            clientCache.invalidate(clientUuid)
+            clientBox.query(Client_.clientUuid.equal(clientUuid)).build().remove()
+        }
+        if (minecraftUsername != null) {
+            val client = find(null, minecraftUsername)
+            if (client != null) {
+                clientCache.invalidate(client.clientUuid)
+                clientBox.remove(client.id)
+            }
         }
     }
 }
