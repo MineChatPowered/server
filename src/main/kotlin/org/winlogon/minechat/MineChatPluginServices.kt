@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.logging.Logger
 
 interface MineChatPluginServices {
-    val pluginInstance: JavaPlugin // To allow CommandRegister to use lifecycleManager
+    val pluginInstance: JavaPlugin
     val linkCodeStorage: LinkCodeStorage
     val clientStorage: ClientStorage
     val banStorage: BanStorage

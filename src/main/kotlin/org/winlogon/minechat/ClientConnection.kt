@@ -109,11 +109,11 @@ class ClientConnection(
                         logger.fine("Received PONG message: $payload")
                         handlePong(payload)
                     }
-                    else -> plugin.logger.warning("Unknown packet type: ${mineChatPacket.packetType}")
+                    else -> plugin.loggerProvider.logger.warning("Unknown packet type: ${mineChatPacket.packetType}")
                 }
             }
         } catch (e: Exception) {
-            plugin.logger.warning("Client error: ${e.message}")
+            plugin.loggerProvider.logger.warning("Client error: ${e.message}")
         } finally {
             client?.let {
                 broadcastMinecraft(ChatGradients.LEAVE, "${it.minecraftUsername} has left the chat.")
@@ -138,18 +138,18 @@ class ClientConnection(
             logger.fine("Handling auth with payload: $payload")
 
     
-        val banStorage = plugin.getBanStorage()
+        val banStorage = plugin.banStorage
         val clientUuid = payload.clientUuid
         val linkCode = payload.linkingCode
 
-        var ban = banStorage.getBan(clientUuid, null)
+        var ban: Ban? = banStorage.getBan(clientUuid, null)
         if (ban != null) {
             sendBannedMessage(ban)
             return
         }
 
         if (linkCode.isNotEmpty()) {
-            val link = plugin.getLinkCodeStorage().find(linkCode)
+            val link = plugin.linkCodeStorage.find(linkCode)
             if (link != null) {
                 ban = banStorage.getBan(null, link.minecraftUsername)
                 if (ban != null) {
@@ -158,8 +158,8 @@ class ClientConnection(
                 }
                 if (link.expiresAt > System.currentTimeMillis()) {
                     val client = Client(clientUuid = clientUuid, minecraftUuid = link.minecraftUuid, minecraftUsername = link.minecraftUsername)
-                    plugin.getClientStorage().add(client)
-                    plugin.getLinkCodeStorage().remove(link.code)
+                    plugin.clientStorage.add(client)
+                    plugin.linkCodeStorage.remove(link.code)
                     this.client = client
                     val linkOkPayload = LinkOkPayload(
                         minecraftUuid = link.minecraftUuid.toString()
@@ -177,7 +177,7 @@ class ClientConnection(
             } else {
                             disconnect("Invalid or expired link code")            }
         } else {
-            val client = plugin.getClientStorage().find(clientUuid, null)
+            val client = plugin.clientStorage.find(clientUuid, null)
             if (client != null) {
                 ban = banStorage.getBan(null, client.minecraftUsername)
                 if (ban != null) {
@@ -219,7 +219,7 @@ class ClientConnection(
     private fun handleCapabilities(payload: CapabilitiesPayload) {
         client?.let {
             it.supportsComponents = payload.supportsComponents
-            plugin.getClientStorage().add(it) // Update the client in storage
+            plugin.clientStorage.add(it) // Update the client in storage
             logger.fine("Client ${it.minecraftUsername} updated with capabilities: supportsComponents=${it.supportsComponents}")
         } ?: run {
             logger.warning("Received CAPABILITIES packet before client was authenticated. Disconnecting.")
@@ -239,6 +239,7 @@ class ClientConnection(
         logger.fine("Received PONG from client with timestamp ${payload.timestampMs}")
     }
 
+    @Suppress("UNCHECKED_CAST")
     fun sendMessage(packetType: Int, payload: Any) {
         logger.fine("Sending packet type $packetType with payload: $payload")
         try {
@@ -253,7 +254,7 @@ class ClientConnection(
             writer.write(compressed)
             writer.flush()
         } catch (e: Exception) {
-            plugin.logger.warning("Error sending message: ${e.message}")
+            plugin.loggerProvider.logger.warning("Error sending message: ${e.message}")
         }
     }
 

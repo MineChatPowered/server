@@ -1,6 +1,7 @@
 package org.winlogon.minechat
 
 import io.objectbox.converter.PropertyConverter
+
 import java.util.UUID
 
 class UuidConverter : PropertyConverter<UUID?, String?> {
