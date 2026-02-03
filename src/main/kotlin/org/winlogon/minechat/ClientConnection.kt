@@ -9,13 +9,10 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
-import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 
 import org.bukkit.Bukkit
-import org.bukkit.plugin.java.JavaPlugin.getPlugin
 
-import java.util.logging.Logger
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.Socket

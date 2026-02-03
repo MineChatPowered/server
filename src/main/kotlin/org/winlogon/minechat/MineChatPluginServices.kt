@@ -4,7 +4,6 @@ import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.permissions.Permission
 import org.bukkit.plugin.java.JavaPlugin
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.logging.Logger
 
 interface MineChatPluginServices {
     val pluginInstance: JavaPlugin
