@@ -4,10 +4,11 @@ import com.charleskorn.kaml.Yaml
 
 import io.objectbox.BoxStore
 import io.papermc.paper.event.player.AsyncChatEvent
-import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents
+import org.winlogon.minechat.storage.BanStorage
+import org.winlogon.minechat.storage.ClientStorage
+import org.winlogon.minechat.storage.LinkCodeStorage
+import org.winlogon.minechat.entities.MyObjectBox
 
-import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 
@@ -23,7 +24,6 @@ import java.security.KeyStore
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.logging.Logger
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 
@@ -38,7 +38,7 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
     private val executorService = Executors.newCachedThreadPool()
 
     override val connectedClients = ConcurrentLinkedQueue<ClientConnection>()
-    val loggerProvider: PluginLoggerProvider = PluginLoggerProvider(this)
+    lateinit var loggerProvider: PluginLoggerProvider
     override lateinit var linkCodeStorage: LinkCodeStorage
     override lateinit var clientStorage: ClientStorage
     override lateinit var banStorage: BanStorage
@@ -70,6 +70,18 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
     }
 
     override fun onLoad() {
+        isFolia = try {
+            Class.forName("io.papermc.paper.threadedregions.RegionizedServer")
+            true
+        } catch (_: ClassNotFoundException) {
+            false
+        }
+
+        loggerProvider = PluginLoggerProvider(this)
+
+        reloadConfigAndDependencies()
+        dataFolder.mkdirs()
+
         permissions = mapOf(
             "reload" to Permission("minechat.reload", "Reloads the MineChat configuration."),
             "ban" to Permission("minechat.ban", "Bans a player from the MineChat server."),
@@ -78,16 +90,6 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
     }
 
     override fun onEnable() {
-        isFolia = try {
-            Class.forName("io.papermc.paper.threadedregions.RegionizedServer")
-            true
-        } catch (ignored: ClassNotFoundException) {
-            false
-        }
-        reloadConfigAndDependencies()
-
-        dataFolder.mkdirs()
-
         boxStore = MyObjectBox.builder().directory(dataFolder).build()
         linkCodeStorage = LinkCodeStorage(boxStore)
         clientStorage = ClientStorage(boxStore)
@@ -109,7 +111,7 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
         }
 
         try {
-            val keyStore = java.security.KeyStore.getInstance("JKS")
+            val keyStore = KeyStore.getInstance("JKS")
             keyStore.load(keystoreFile.inputStream(), keystorePassword)
 
             val keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
@@ -193,5 +195,5 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
         }
     }
 
-    public fun removeClient(client: ClientConnection) = connectedClients.remove(client)
+    fun removeClient(client: ClientConnection) = connectedClients.remove(client)
 }

@@ -1,7 +1,9 @@
-package org.winlogon.minechat
+package org.winlogon.minechat.storage
 
 import io.objectbox.Box
 import io.objectbox.BoxStore
+import org.winlogon.minechat.entities.Ban
+import org.winlogon.minechat.entities.Ban_
 
 class BanStorage(boxStore: BoxStore) {
     private val banBox: Box<Ban> = boxStore.boxFor(Ban::class.java)

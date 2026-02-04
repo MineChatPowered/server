@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class TlsConfig(
-    val enabled: Boolean = false,
+    val enabled: Boolean = true,
     val keystore: String = "keystore.jks",
     @SerialName("keystore-password")
     val keystorePassword: String = "password"

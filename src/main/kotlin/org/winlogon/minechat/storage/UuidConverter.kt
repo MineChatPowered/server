@@ -1,4 +1,4 @@
-package org.winlogon.minechat
+package org.winlogon.minechat.storage
 
 import io.objectbox.converter.PropertyConverter
 

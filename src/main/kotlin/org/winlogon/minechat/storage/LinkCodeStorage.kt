@@ -1,10 +1,12 @@
-package org.winlogon.minechat
+package org.winlogon.minechat.storage
 
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 
 import io.objectbox.Box
 import io.objectbox.BoxStore
+import org.winlogon.minechat.entities.LinkCode
+import org.winlogon.minechat.entities.LinkCode_
 
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit

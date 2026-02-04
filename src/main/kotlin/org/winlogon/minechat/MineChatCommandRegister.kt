@@ -12,6 +12,8 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 
 import org.bukkit.entity.Player
 import org.bukkit.event.Listener
+import org.winlogon.minechat.entities.Ban
+import org.winlogon.minechat.entities.LinkCode
 
 class MineChatCommandRegister(private val services: MineChatPluginServices) : Listener {
     fun registerCommands() {
@@ -90,7 +92,6 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
         }
     }
 
-
     fun generateAndSendLinkCode(player: Player) {
         val code = services.generateRandomLinkCode()
 
@@ -111,12 +112,7 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
         )
     }
 
-
     fun getClientConnection(username: String): ClientConnection? {
         return services.connectedClients.find { it.getClient()?.minecraftUsername == username }
     }
-
-
-
-
 }

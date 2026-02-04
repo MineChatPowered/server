@@ -8,8 +8,6 @@ import org.eclipse.aether.artifact.DefaultArtifact
 import org.eclipse.aether.graph.Dependency
 import org.eclipse.aether.repository.RemoteRepository
 
-import java.nio.file.Path
-
 class MineChatLoader : PluginLoader {
     override fun classloader(classpathBuilder: PluginClasspathBuilder) {
     	val caffeineVersion = "3.2.0"

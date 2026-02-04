@@ -2,7 +2,6 @@ package org.winlogon.minechat
 
 import com.fasterxml.jackson.annotation.JsonCreator
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.fasterxml.jackson.databind.annotation.JsonSerialize
 
 // Packet Type IDs as defined in the spec
 object PacketTypes {
