@@ -98,7 +98,7 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
         MineChatCommandRegister(this).registerCommands()
 
         if (!mineChatConfig.tls.enabled) {
-            loggerProvider.logger.severe("MineChat server cannot start: TLS is disabled in config.yml. TLS is mandatory as per specification.")
+            loggerProvider.logger.severe("MineChat server cannot start: TLS is disabled in config.yml, but it is mandatory.")
             return
         }
 
@@ -106,7 +106,7 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
         val keystorePassword = mineChatConfig.tls.keystorePassword.toCharArray()
 
         if (!keystoreFile.exists()) {
-            loggerProvider.logger.severe("MineChat server cannot start: Keystore file not found at ${keystoreFile.absolutePath}. TLS is mandatory as per specification.")
+            loggerProvider.logger.severe("MineChat server cannot start: TLS is mandatory, but no keystore file was found at ${keystoreFile.absolutePath}.")
             return
         }
 
