@@ -295,7 +295,7 @@ class ClientConnection(
 
     private fun handlePong(payload: PongPayload) {
         // For now, just log that a PONG was received.
-        // In a more advanced implementation, this would be used for RTT calculation.
+        // TODO: use this for RTT calculation
         logger.fine("Received PONG from client with timestamp ${payload.timestampMs}")
     }
 
