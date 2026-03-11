@@ -1,7 +1,7 @@
 package org.winlogon.minechat
 
-import com.fasterxml.jackson.annotation.JsonCreator
-import com.fasterxml.jackson.annotation.JsonProperty
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 // Packet Type IDs as defined in the spec
 object PacketTypes {
@@ -18,6 +18,23 @@ object PacketTypes {
     const val DISCONNECT = 0x80
 }
 
+object ModerationAction {
+    const val KICK = 0
+    const val BAN = 1
+}
+
+object ModerationScope {
+    const val GLOBAL = 0
+    const val LOCAL = 1
+}
+
+object ChatGradients {
+    val JOIN = Pair("#27AE60", "#2ECC71")
+    val LEAVE = Pair("#C0392B", "#E74C3C")
+    val AUTH = Pair("#8E44AD", "#9B59B6")
+    val INFO = Pair("#2980B9", "#3498DB")
+}
+
 /**
  * Represents the common packet envelope as defined by the MineChat Protocol.
  * {
@@ -25,47 +42,78 @@ object PacketTypes {
  *   1: payload (map)
  * }
  */
-data class MineChatPacket @JsonCreator constructor(
-    @JsonProperty("0") val packetType: Int,
-    @JsonProperty("1") val payload: Map<Int, Any?> // Payload fields use integer keys
-)
+@Serializable
+data class MineChatPacket(
+    @SerialName("0") val packetType: Int,
+    @SerialName("1") val payload: ByteArray // Raw CBOR bytes for the payload map
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as MineChatPacket
+
+        if (packetType != other.packetType) return false
+        if (!payload.contentEquals(other.payload)) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = packetType
+        result = 31 * result + payload.contentHashCode()
+        return result
+    }
+}
 
 // Payload data classes
-data class LinkPayload @JsonCreator constructor(
-    @JsonProperty("0") val linkingCode: String,
-    @JsonProperty("1") val clientUuid: String
+@Serializable
+data class LinkPayload(
+    @SerialName("0") val linkingCode: String,
+    @SerialName("1") val clientUuid: String
 )
 
-data class LinkOkPayload @JsonCreator constructor(
-    @JsonProperty("0") val minecraftUuid: String
+@Serializable
+data class LinkOkPayload(
+    @SerialName("0") val minecraftUuid: String
 )
 
-data class CapabilitiesPayload @JsonCreator constructor(
-    @JsonProperty("0") val supportsComponents: Boolean
+@Serializable
+data class CapabilitiesPayload(
+    @SerialName("0") val supportsComponents: Boolean
 )
 
+@Serializable
 class AuthOkPayload
 
-data class ChatMessagePayload @JsonCreator constructor(
-    @JsonProperty("0") val format: String,
-    @JsonProperty("1") val content: String
+@Serializable
+data class ChatMessagePayload(
+    @SerialName("0") val format: String,
+    @SerialName("1") val content: String
 )
 
-data class PingPayload @JsonCreator constructor(
-    @JsonProperty("0") val timestampMs: Long
+@Serializable
+data class PingPayload(
+    @SerialName("0") val timestampMs: Long
 )
 
-data class PongPayload @JsonCreator constructor(
-    @JsonProperty("0") val timestampMs: Long
+@Serializable
+data class PongPayload(
+    @SerialName("0") val timestampMs: Long
 )
 
-data class ModerationPayload @JsonCreator constructor(
-    @JsonProperty("0") val action: Int,
-    @JsonProperty("1") val scope: Int,
-    @JsonProperty("2") val reason: String?, // Optional
-    @JsonProperty("3") val durationSeconds: Int? // Optional
+@Serializable
+data class ModerationPayload(
+    @SerialName("0") val action: Int,
+    @SerialName("1") val scope: Int,
+    @SerialName("2") val reason: String? = null,
+    @SerialName("3") val durationSeconds: Int? = null
 )
 
-data class DisconnectPayload @JsonCreator constructor(
-    @JsonProperty("0") val reason: String
+@Serializable
+data class DisconnectPayload(
+    @SerialName("2") val reason: String
 )
+
+@Serializable
+class EmptyPayload

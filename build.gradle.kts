@@ -100,6 +100,7 @@ dependencies {
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:" + libs.versions.kotlinx.serialization.json.get())
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-cbor:" + libs.versions.kotlinx.serialization.cbor.get())
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
     testImplementation("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")

@@ -28,6 +28,7 @@ import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.serializer
 
 class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
     private var serverSocket: ServerSocket? = null
@@ -150,18 +151,23 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
         }
         serverThread?.start()
 
+        // Register chat listener
         server.pluginManager.registerEvents(object : Listener {
             @EventHandler
             fun onChat(event: AsyncChatEvent) {
-                val plainMsg = PlainTextComponentSerializer.plainText().serialize(event.message())
-                // TODO: actually format message as CommonMark
-                val chatMessagePayload = ChatMessagePayload(
-                    format = "commonmark",
-                    content = plainMsg
-                )
-                broadcastToClients(PacketTypes.CHAT_MESSAGE, chatMessagePayload)
+                this@MineChatServerPlugin.onChat(event)
             }
         }, this)
+    }
+
+    @EventHandler
+    fun onChat(event: AsyncChatEvent) {
+        val markdownMsg = MarkdownSerializer.markdown().serialize(event.message())
+        val chatMessagePayload = ChatMessagePayload(
+            format = "commonmark",
+            content = markdownMsg
+        )
+        broadcastToClients(PacketTypes.CHAT_MESSAGE, chatMessagePayload)
     }
 
     override fun onDisable() {
@@ -173,21 +179,45 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
         executorService.shutdownNow()
         try {
             executorService.awaitTermination(10, TimeUnit.SECONDS)
-        } catch (e: InterruptedException) {
+        } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
         boxStore.close()
         try {
             serverThread?.join()
-        } catch (e: InterruptedException) {
+        } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
     }
 
-    fun broadcastToClients(packetType: Int, payload: Any) {
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    private val cbor = kotlinx.serialization.cbor.Cbor {
+        ignoreUnknownKeys = true
+        encodeDefaults = false
+    }
+
+    override fun <T : Any> broadcastToClients(packetType: Int, payload: T) {
+        val payloadBytes = try {
+            @OptIn(kotlinx.serialization.InternalSerializationApi::class, kotlinx.serialization.ExperimentalSerializationApi::class)
+            val serializer = payload::class.serializer()
+            @Suppress("UNCHECKED_CAST")
+            cbor.encodeToByteArray(serializer as kotlinx.serialization.KSerializer<T>, payload)
+        } catch (e: Exception) {
+            loggerProvider.logger.warning("Error encoding payload for broadcast: ${e.message}")
+            return
+        }
+
         connectedClients.forEach { client ->
             try {
-                client.sendMessage(packetType, payload)
+                // Send already encoded payload
+                val mineChatPacket = MineChatPacket(packetType, payloadBytes)
+                val serialized = cbor.encodeToByteArray(MineChatPacket.serializer(), mineChatPacket)
+                val compressed = com.github.luben.zstd.Zstd.compress(serialized)
+                
+                client.writer.writeInt(serialized.size)
+                client.writer.writeInt(compressed.size)
+                client.writer.write(compressed)
+                client.writer.flush()
             } catch (e: Exception) {
                 loggerProvider.logger.warning("Error sending message to client: ${e.message}")
                 connectedClients.remove(client)

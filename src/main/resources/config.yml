@@ -12,7 +12,7 @@ expiry-code-minutes: 5
 tls:
   # Enable or disable TLS.
   # If enabled, you must provide a keystore.
-  enabled: false
+  enabled: true
   # The name of the keystore file in the plugin's data folder.
   keystore: "keystore.jks"
   # The password for the keystore.

@@ -31,6 +31,13 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
             .executes { ctx ->
                 services.reloadConfigAndDependencies()
                 ctx.source.sender.sendMessage(Component.text("MineChat config reloaded.").color(NamedTextColor.GREEN))
+                
+                val infoMsg = "MineChat configuration has been reloaded by an administrator."
+                val chatPayload = ChatMessagePayload(
+                    format = "commonmark",
+                    content = "<gradient:${ChatGradients.INFO.first}:${ChatGradients.INFO.second}>$infoMsg</gradient>"
+                )
+                services.broadcastToClients(PacketTypes.CHAT_MESSAGE, chatPayload)
                 Command.SINGLE_SUCCESS
             }
             .build()
@@ -45,8 +52,21 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
                         ctx.source.sender.sendMessage(Component.text("Player not found.").color(NamedTextColor.RED))
                         return@executes 0
                     }
-                    val ban = Ban(minecraftUsername = playerName, reason = "Banned by an operator.")
+                    val reason = "Banned by an operator."
+                    val ban = Ban(minecraftUsername = playerName, reason = reason)
                     services.banStorage.add(ban)
+                    
+                    // Notify other clients
+                    val modPayload = ModerationPayload(
+                        action = ModerationAction.BAN,
+                        scope = ModerationScope.GLOBAL,
+                        reason = reason
+                    )
+                    services.broadcastToClients(PacketTypes.MODERATION, modPayload)
+                    
+                    // Disconnect the client if online
+                    getClientConnection(playerName)?.disconnect(reason)
+                    
                     ctx.source.sender.sendMessage(Component.text("Banned $playerName from MineChat.").color(NamedTextColor.GREEN))
                     Command.SINGLE_SUCCESS
                 }
@@ -75,7 +95,17 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
                         ctx.source.sender.sendMessage(Component.text("Player not found or not connected via MineChat.").color(NamedTextColor.RED))
                         return@executes 0
                     }
-                    clientConnection.disconnect("Kicked by an operator.")
+                    val reason = "Kicked by an operator."
+                    
+                    // Notify other clients
+                    val modPayload = ModerationPayload(
+                        action = ModerationAction.KICK,
+                        scope = ModerationScope.LOCAL,
+                        reason = reason
+                    )
+                    services.broadcastToClients(PacketTypes.MODERATION, modPayload)
+                    
+                    clientConnection.disconnect(reason)
                     ctx.source.sender.sendMessage(Component.text("Kicked $playerName from MineChat.").color(NamedTextColor.GREEN))
                     Command.SINGLE_SUCCESS
                 }

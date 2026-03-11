@@ -1,9 +1,10 @@
 package org.winlogon.minechat
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.dataformat.cbor.CBORFactory
-import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.github.luben.zstd.Zstd
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.cbor.Cbor
+import kotlinx.serialization.decodeFromByteArray
+import kotlinx.serialization.encodeToByteArray
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -29,27 +30,35 @@ class ClientConnection(
     private val plugin: MineChatServerPlugin,
     private val miniMessage: MiniMessage
 ) : Runnable {
-    private val logger = plugin.logger
-    object ChatGradients {
-        val JOIN = Pair("#27AE60", "#2ECC71")
-        val LEAVE = Pair("#C0392B", "#E74C3C")
-        val AUTH = Pair("#8E44AD", "#9B59B6")
-        val INFO = Pair("#2980B9", "#3498DB")
-    }
+    @PublishedApi
+    internal val logger = plugin.logger
 
     companion object {
         const val MINECHAT_PREFIX_STRING = "&8[&3MineChat&8]"
         val MINECHAT_PREFIX_COMPONENT: Component = LegacyComponentSerializer.legacyAmpersand().deserialize(MINECHAT_PREFIX_STRING)
     }
 
-    private val cborMapper = ObjectMapper(CBORFactory()).registerModule(KotlinModule.Builder().build())
-    private val reader = DataInputStream(socket.getInputStream())
-    private val writer = DataOutputStream(socket.getOutputStream())
+    @OptIn(ExperimentalSerializationApi::class)
+    @PublishedApi
+    internal val cbor = Cbor {
+        ignoreUnknownKeys = true
+        encodeDefaults = false
+    }
+
+    internal val reader = DataInputStream(socket.getInputStream())
+    @PublishedApi
+    internal val writer = DataOutputStream(socket.getOutputStream())
     private var client: Client? = null
     private var running = true
+    private var linkAuthCompleted = false // Tracks if LINK_OK has been sent
+    private var capabilitiesReceived = false // Tracks if CAPABILITIES has been received
     
     // Keep-alive timeout tracking
     private var lastPacketTime = System.currentTimeMillis()
+
+    /** Calculated Round Trip Time in milliseconds */
+    var currentRtt: Long = -1
+        private set
 
     /** 15 seconds as per spec */
     private val keepAliveTimeout = 15000L
@@ -67,6 +76,7 @@ class ClientConnection(
         Bukkit.broadcast(formatPrefixed(finalMessage))
     }
 
+    @OptIn(ExperimentalSerializationApi::class)
     override fun run() {
         try {
             // Schedule periodic PING packets for keep-alive
@@ -102,14 +112,12 @@ class ClientConnection(
                         logger.warning("Received non-positive decompressed length: $decompressedLen. Terminating connection.")
                         break // Terminate connection
                     }
-                    logger.fine("Received decompressedLen: $decompressedLen")
 
                     val compressedLen = reader.readInt()
                     if (compressedLen <= 0) {
                         logger.warning("Received non-positive compressed length: $compressedLen. Terminating connection.")
                         break // Terminate connection
                     }
-                    logger.fine("Received compressedLen: $compressedLen")
                     
                     // Update last packet time after successful read
                     lastPacketTime = currentTime
@@ -123,50 +131,53 @@ class ClientConnection(
                         break // Terminate connection
                     }
 
-                    val mineChatPacket = cborMapper.readValue(decompressed, MineChatPacket::class.java)
-                    logger.fine("Received MineChatPacket: $mineChatPacket")
+                    val mineChatPacket = cbor.decodeFromByteArray<MineChatPacket>(decompressed)
                     
                     // Update last packet time for any received packet
                     lastPacketTime = System.currentTimeMillis()
 
                     when (mineChatPacket.packetType) {
                         PacketTypes.LINK -> {
-                            val payload = cborMapper.convertValue(mineChatPacket.payload, LinkPayload::class.java)
+                            val payload = cbor.decodeFromByteArray<LinkPayload>(mineChatPacket.payload)
                             logger.fine("Received LINK message: $payload")
                             handleAuth(payload)
                         }
                         PacketTypes.CAPABILITIES -> {
-                            val payload = cborMapper.convertValue(mineChatPacket.payload, CapabilitiesPayload::class.java)
+                            val payload = cbor.decodeFromByteArray<CapabilitiesPayload>(mineChatPacket.payload)
                             logger.fine("Received CAPABILITIES message: $payload")
                             handleCapabilities(payload)
                         }
                         PacketTypes.CHAT_MESSAGE -> {
-                            val payload = cborMapper.convertValue(mineChatPacket.payload, ChatMessagePayload::class.java)
+                            val payload = cbor.decodeFromByteArray<ChatMessagePayload>(mineChatPacket.payload)
                             logger.fine("Received CHAT_MESSAGE message: $payload")
                             handleChat(payload)
                         }
                         PacketTypes.PING -> {
-                            val payload = cborMapper.convertValue(mineChatPacket.payload, PingPayload::class.java)
+                            val payload = cbor.decodeFromByteArray<PingPayload>(mineChatPacket.payload)
                             logger.fine("Received PING message: $payload")
                             handlePing(payload)
                         }
                         PacketTypes.PONG -> {
-                            val payload = cborMapper.convertValue(mineChatPacket.payload, PongPayload::class.java)
+                            val payload = cbor.decodeFromByteArray<PongPayload>(mineChatPacket.payload)
                             logger.fine("Received PONG message: $payload")
                             handlePong(payload)
                         }
-                        else -> plugin.loggerProvider.logger.warning("Unknown packet type: ${mineChatPacket.packetType}")
+                        else -> logger.warning("Unknown packet type: ${mineChatPacket.packetType}")
                     }
                 } catch (_: SocketTimeoutException) {
                     // This is expected due to keep-alive timeout checking, continue loop
                     continue
                 } catch (e: Exception) {
-                    plugin.loggerProvider.logger.warning("Client error: ${e.message}")
+                    if (running && !disconnected.get()) {
+                        logger.warning("Client error during packet processing: ${e.message}")
+                    }
                     break
                 }
             }
         } catch (e: Exception) {
-            plugin.loggerProvider.logger.warning("Client error: ${e.message}")
+            if (running && !disconnected.get()) {
+                logger.warning("Client error in run loop: ${e.message}")
+            }
         } finally {
             client?.let {
                 broadcastMinecraft(ChatGradients.LEAVE, "${it.minecraftUsername} has left the chat.")
@@ -232,13 +243,15 @@ class ClientConnection(
         plugin.linkCodeStorage.remove(link.code)
         this.client = client
 
+        // Per spec: send LINK_OK, wait for CAPABILITIES, then send AUTH_OK
         sendMessage(
             PacketTypes.LINK_OK,
             LinkOkPayload(minecraftUuid = link.minecraftUuid.toString())
         )
-        sendMessage(PacketTypes.AUTH_OK, AuthOkPayload())
+        linkAuthCompleted = true
 
-        broadcastMinecraft(ChatGradients.AUTH, "${link.minecraftUsername} has successfully authenticated.")
+        // Now wait for CAPABILITIES before completing auth
+        logger.fine("Sent LINK_OK, waiting for CAPABILITIES...")
     }
 
     private fun handleExistingClientAuth(clientUuid: String) {
@@ -251,15 +264,26 @@ class ClientConnection(
         }
 
         this.client = client
-        sendMessage(PacketTypes.AUTH_OK, AuthOkPayload())
 
-        broadcastMinecraft(ChatGradients.JOIN, "${client.minecraftUsername} has joined the chat.")
+        // Per spec: send LINK_OK, wait for CAPABILITIES, then send AUTH_OK
+        sendMessage(
+            PacketTypes.LINK_OK,
+            LinkOkPayload(minecraftUuid = client.minecraftUuid.toString())
+        )
+        linkAuthCompleted = true
+
+        // Now wait for CAPABILITIES before completing auth
+        logger.fine("Sent LINK_OK for reconnection, waiting for CAPABILITIES...")
     }
 
     private fun handleChat(payload: ChatMessagePayload) {
         client?.let {
-            // Check payload.format here if needed. Assuming "commonmark" for now.
-            val message = miniMessage.deserialize(payload.content) // Deserialize the content string to an Adventure Component
+            val message = if (payload.format == "commonmark") {
+                MarkdownSerializer.markdown().deserialize(payload.content)
+            } else {
+                miniMessage.deserialize(payload.content)
+            }
+            
             val usernamePlaceholder = Component.text(it.minecraftUsername, NamedTextColor.DARK_GREEN)
             val formattedMsg = miniMessage.deserialize(
                 "<gray><sender><dark_gray>:</dark_gray> <message></gray>",
@@ -268,22 +292,48 @@ class ClientConnection(
             )
             val finalMsg = formatPrefixed(formattedMsg)
             Bukkit.broadcast(finalMsg)
+            
+            val markdownContent = MarkdownSerializer.markdown().serialize(message)
             val chatMessagePayload = ChatMessagePayload(
                 format = "commonmark",
-                content = miniMessage.serialize(message)
+                content = markdownContent
             )
             plugin.broadcastToClients(PacketTypes.CHAT_MESSAGE, chatMessagePayload)
         }
     }
 
     private fun handleCapabilities(payload: CapabilitiesPayload) {
+        // Per spec, CAPABILITIES must come after LINK_OK
+        if (!linkAuthCompleted) {
+            logger.warning("Received CAPABILITIES packet before LINK_OK. Disconnecting.")
+            disconnect("Received CAPABILITIES before completing linking.")
+            return
+        }
+
+        if (capabilitiesReceived) {
+            logger.warning("Received duplicate CAPABILITIES packet. Ignoring.")
+            return
+        }
+
         client?.let {
             it.supportsComponents = payload.supportsComponents
             plugin.clientStorage.add(it) // Update the client in storage
-            logger.fine("Client ${it.minecraftUsername} updated with capabilities: supportsComponents=${it.supportsComponents}")
+            
+            // Send AUTH_OK to complete the authentication flow
+            sendMessage(PacketTypes.AUTH_OK, AuthOkPayload())
+            capabilitiesReceived = true
+            
+            // Send join message
+            if (it.supportsComponents) {
+                broadcastMinecraft(ChatGradients.JOIN, "${it.minecraftUsername} has joined the chat.")
+            } else {
+                broadcastMinecraft(ChatGradients.AUTH, "${it.minecraftUsername} has successfully authenticated.")
+            }
+            
+            logger.fine("Client ${it.minecraftUsername} authenticated with capabilities: supportsComponents=${it.supportsComponents}")
         } ?: run {
-            logger.warning("Received CAPABILITIES packet before client was authenticated. Disconnecting.")
-            disconnect("Received CAPABILITIES before authentication.")
+            logger.warning("Received CAPABILITIES packet but client is null. This should not happen.")
+            disconnect("Internal error: client not found.")
         }
     }
 
@@ -294,20 +344,17 @@ class ClientConnection(
     }
 
     private fun handlePong(payload: PongPayload) {
-        // For now, just log that a PONG was received.
-        // TODO: use this for RTT calculation
-        logger.fine("Received PONG from client with timestamp ${payload.timestampMs}")
+        val now = System.currentTimeMillis()
+        currentRtt = now - payload.timestampMs
+        logger.fine("Received PONG from client with RTT: ${currentRtt}ms")
     }
 
-    @Suppress("UNCHECKED_CAST")
-    fun sendMessage(packetType: Int, payload: Any) {
-        logger.fine("Sending packet type $packetType with payload: $payload")
+    @OptIn(ExperimentalSerializationApi::class)
+    inline fun <reified T : Any> sendMessage(packetType: Int, payload: T) {
         try {
-            // Convert the payload object to a Map<Int, Any?>
-            val payloadMap = cborMapper.convertValue(payload, Map::class.java) as Map<Int, Any?>
-            val mineChatPacket = MineChatPacket(packetType, payloadMap)
-
-            val serialized = cborMapper.writeValueAsBytes(mineChatPacket)
+            val payloadBytes = cbor.encodeToByteArray(payload)
+            val mineChatPacket = MineChatPacket(packetType, payloadBytes)
+            val serialized = cbor.encodeToByteArray(mineChatPacket)
             val compressed = Zstd.compress(serialized)
             
             // Validate sizes are positive (per spec requirement)
@@ -321,7 +368,7 @@ class ClientConnection(
             writer.write(compressed)
             writer.flush()
         } catch (e: Exception) {
-            plugin.loggerProvider.logger.warning("Error sending message: ${e.message}")
+            logger.warning("Error sending message: ${e.message}")
         }
     }
 
@@ -329,7 +376,9 @@ class ClientConnection(
         running = false
         disconnected.set(true)
         scheduledExecutor.shutdown()
-        socket.close()
+        try {
+            socket.close()
+        } catch (_: Exception) {}
     }
 
     fun formatPrefixed(message: Component): Component {
