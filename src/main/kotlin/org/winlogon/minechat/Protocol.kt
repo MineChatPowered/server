@@ -19,13 +19,15 @@ object PacketTypes {
 }
 
 object ModerationAction {
-    const val KICK = 0
-    const val BAN = 1
+    const val WARN = 0
+    const val MUTE = 1
+    const val KICK = 2
+    const val BAN = 3
 }
 
 object ModerationScope {
-    const val GLOBAL = 0
-    const val LOCAL = 1
+    const val CLIENT = 0
+    const val ACCOUNT = 1
 }
 
 object ChatGradients {
@@ -112,7 +114,7 @@ data class ModerationPayload(
 
 @Serializable
 data class DisconnectPayload(
-    @SerialName("2") val reason: String
+    @SerialName("0") val reason: String
 )
 
 @Serializable

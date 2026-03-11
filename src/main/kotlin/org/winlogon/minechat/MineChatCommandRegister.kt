@@ -59,7 +59,7 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
                     // Notify other clients
                     val modPayload = ModerationPayload(
                         action = ModerationAction.BAN,
-                        scope = ModerationScope.GLOBAL,
+                        scope = ModerationScope.ACCOUNT,
                         reason = reason
                     )
                     services.broadcastToClients(PacketTypes.MODERATION, modPayload)
@@ -100,7 +100,7 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
                     // Notify other clients
                     val modPayload = ModerationPayload(
                         action = ModerationAction.KICK,
-                        scope = ModerationScope.LOCAL,
+                        scope = ModerationScope.CLIENT,
                         reason = reason
                     )
                     services.broadcastToClients(PacketTypes.MODERATION, modPayload)
