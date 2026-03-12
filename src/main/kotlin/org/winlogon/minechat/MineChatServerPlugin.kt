@@ -36,7 +36,7 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
     private lateinit var boxStore: BoxStore
     @Volatile private var isServerRunning: Boolean = false
     private var serverThread: Thread? = null
-    private val executorService = Executors.newCachedThreadPool()
+    private val executorService = Executors.newVirtualThreadPerTaskExecutor()
 
     override val connectedClients = ConcurrentLinkedQueue<ClientConnection>()
     lateinit var loggerProvider: PluginLoggerProvider
