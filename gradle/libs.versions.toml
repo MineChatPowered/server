@@ -1,5 +1,5 @@
 [versions]
-kotlinx-serialization-json = "1.9.0"
-kotlinx-serialization-cbor = "1.9.0"
+kotlinx-serialization-json = "1.10.0"
+kotlinx-serialization-cbor = "1.10.0"
 kaml = "0.102.0"
 caffeine = "3.1.8"

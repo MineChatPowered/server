@@ -138,7 +138,7 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
                     val socket = serverSocket?.accept()
                     if (socket != null) {
                         loggerProvider.logger.info("Client connected: ${socket.inetAddress}")
-                        val connection = ClientConnection(socket, this, miniMessage)
+                        val connection = ClientConnection(socket, this, executorService)
                         connectedClients.add(connection)
                         executorService.submit(connection)
                     }
@@ -190,28 +190,13 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
         }
     }
 
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    private val cbor = kotlinx.serialization.cbor.Cbor {
-        ignoreUnknownKeys = true
-        encodeDefaults = false
-    }
+    private val cbor = createCbor()
 
-    override fun <T : Any> broadcastToClients(packetType: Int, payload: T) {
-        val payloadBytes = try {
-            @OptIn(kotlinx.serialization.InternalSerializationApi::class, kotlinx.serialization.ExperimentalSerializationApi::class)
-            val serializer = payload::class.serializer()
-            @Suppress("UNCHECKED_CAST")
-            cbor.encodeToByteArray(serializer as kotlinx.serialization.KSerializer<T>, payload)
-        } catch (e: Exception) {
-            loggerProvider.logger.warning("Error encoding payload for broadcast: ${e.message}")
-            return
-        }
-
+    override fun broadcastToClients(packetType: Int, payload: PacketPayload) {
         connectedClients.forEach { client ->
             try {
-                // Send already encoded payload
-                val mineChatPacket = MineChatPacket(packetType, payloadBytes)
-                val serialized = cbor.encodeToByteArray(MineChatPacket.serializer(), mineChatPacket)
+                val mineChatPacket = MineChatPacket(packetType, payload)
+                val serialized = cbor.encodeToByteArray(MineChatPacketSerializer, mineChatPacket)
                 val compressed = com.github.luben.zstd.Zstd.compress(serialized)
                 
                 client.writer.writeInt(serialized.size)

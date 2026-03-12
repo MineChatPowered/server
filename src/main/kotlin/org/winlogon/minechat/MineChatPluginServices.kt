@@ -20,5 +20,5 @@ interface MineChatPluginServices {
 
     fun reloadConfigAndDependencies()
     fun generateRandomLinkCode(): String
-    fun <T : Any> broadcastToClients(packetType: Int, payload: T)
+    fun broadcastToClients(packetType: Int, payload: PacketPayload)
 }

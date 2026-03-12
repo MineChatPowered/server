@@ -1,9 +1,23 @@
+@file:OptIn(ExperimentalSerializationApi::class)
+
 package org.winlogon.minechat
 
-import kotlinx.serialization.SerialName
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.cbor.Cbor
+import kotlinx.serialization.cbor.CborLabel
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.descriptors.element
+import kotlinx.serialization.encoding.CompositeDecoder
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.encoding.decodeStructure
+import kotlinx.serialization.encoding.encodeStructure
 
-// Packet Type IDs as defined in the spec
 object PacketTypes {
     const val LINK = 0x01
     const val LINK_OK = 0x02
@@ -13,8 +27,6 @@ object PacketTypes {
     const val PING = 0x06
     const val PONG = 0x07
     const val MODERATION = 0x08
-
-    // Custom/implementation-private packet types (0x80-0xFF)
     const val DISCONNECT = 0x80
 }
 
@@ -37,85 +49,164 @@ object ChatGradients {
     val INFO = Pair("#2980B9", "#3498DB")
 }
 
-/**
- * Represents the common packet envelope as defined by the MineChat Protocol.
- * {
- *   0: packet_type (int),
- *   1: payload (map)
- * }
- */
 @Serializable
+sealed class PacketPayload
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("link")
+data class LinkPayload(
+    @CborLabel(0)
+    val linking_code: String,
+    @CborLabel(1)
+    val client_uuid: String
+) : PacketPayload()
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("link_ok")
+data class LinkOkPayload(
+    @CborLabel(0)
+    val minecraft_uuid: String
+) : PacketPayload()
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("capabilities")
+data class CapabilitiesPayload(
+    @CborLabel(0)
+    val supports_components: Boolean
+) : PacketPayload()
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("auth_ok")
+class AuthOkPayload : PacketPayload()
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("chat_message")
+data class ChatMessagePayload(
+    @CborLabel(0)
+    val format: String,
+    @CborLabel(1)
+    val content: String
+) : PacketPayload()
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("ping")
+data class PingPayload(
+    @CborLabel(0)
+    val timestamp_ms: Long
+) : PacketPayload()
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("pong")
+data class PongPayload(
+    @CborLabel(0)
+    val timestamp_ms: Long
+) : PacketPayload()
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("moderation")
+data class ModerationPayload(
+    @CborLabel(0)
+    val action: Int,
+    @CborLabel(1)
+    val scope: Int,
+    @CborLabel(2)
+    val reason: String? = null,
+    @CborLabel(3)
+    val duration_seconds: Int? = null
+) : PacketPayload()
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("disconnect")
+data class DisconnectPayload(
+    @CborLabel(0)
+    val reason: String
+) : PacketPayload()
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("empty")
+class EmptyPayload : PacketPayload()
+
+@OptIn(ExperimentalSerializationApi::class)
 data class MineChatPacket(
-    @SerialName("0") val packetType: Int,
-    @SerialName("1") val payload: ByteArray // Raw CBOR bytes for the payload map
+    val packetType: Int,
+    val payload: PacketPayload
 ) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as MineChatPacket
-
-        if (packetType != other.packetType) return false
-        if (!payload.contentEquals(other.payload)) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = packetType
-        result = 31 * result + payload.contentHashCode()
-        return result
+    companion object {
+        val serializer = MineChatPacketSerializer
     }
 }
 
-// Payload data classes
-@Serializable
-data class LinkPayload(
-    @SerialName("0") val linkingCode: String,
-    @SerialName("1") val clientUuid: String
-)
+@OptIn(ExperimentalSerializationApi::class)
+object MineChatPacketSerializer : KSerializer<MineChatPacket> {
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("MineChatPacket") {
+        element<Int>("packetType")
+        element<PacketPayload>("payload")
+    }
 
-@Serializable
-data class LinkOkPayload(
-    @SerialName("0") val minecraftUuid: String
-)
+    override fun serialize(encoder: Encoder, value: MineChatPacket) {
+        encoder.encodeStructure(descriptor) {
+            encodeIntElement(descriptor, 0, value.packetType)
+            @Suppress("UNCHECKED_CAST")
+            encodeSerializableElement(
+                descriptor, 1, 
+                payloadSerializer(value.packetType) as kotlinx.serialization.SerializationStrategy<PacketPayload>, 
+                value.payload
+            )
+        }
+    }
 
-@Serializable
-data class CapabilitiesPayload(
-    @SerialName("0") val supportsComponents: Boolean
-)
+    override fun deserialize(decoder: Decoder): MineChatPacket {
+        return decoder.decodeStructure(descriptor) {
+            var packetType: Int? = null
+            var payload: PacketPayload? = null
 
-@Serializable
-class AuthOkPayload
+            while (true) {
+                when (decodeElementIndex(descriptor)) {
+                    0 -> packetType = decodeIntElement(descriptor, 0)
+                    1 -> {
+                        val pt = packetType ?: throw SerializationException("packetType must be before payload")
+                        payload = decodeSerializableElement(descriptor, 1, payloadSerializer(pt))
+                    }
+                    CompositeDecoder.DECODE_DONE -> break
+                    else -> throw SerializationException("Unknown index")
+                }
+            }
 
-@Serializable
-data class ChatMessagePayload(
-    @SerialName("0") val format: String,
-    @SerialName("1") val content: String
-)
+            if (packetType == null) throw SerializationException("Missing packetType")
+            if (payload == null) throw SerializationException("Missing payload")
 
-@Serializable
-data class PingPayload(
-    @SerialName("0") val timestampMs: Long
-)
+            MineChatPacket(packetType, payload)
+        }
+    }
 
-@Serializable
-data class PongPayload(
-    @SerialName("0") val timestampMs: Long
-)
+    private fun payloadSerializer(packetType: Int): KSerializer<out PacketPayload> {
+        return when (packetType) {
+            PacketTypes.LINK -> LinkPayload.serializer()
+            PacketTypes.LINK_OK -> LinkOkPayload.serializer()
+            PacketTypes.CAPABILITIES -> CapabilitiesPayload.serializer()
+            PacketTypes.AUTH_OK -> AuthOkPayload.serializer()
+            PacketTypes.CHAT_MESSAGE -> ChatMessagePayload.serializer()
+            PacketTypes.PING -> PingPayload.serializer()
+            PacketTypes.PONG -> PongPayload.serializer()
+            PacketTypes.MODERATION -> ModerationPayload.serializer()
+            PacketTypes.DISCONNECT -> DisconnectPayload.serializer()
+            else -> EmptyPayload.serializer()
+        }
+    }
+}
 
-@Serializable
-data class ModerationPayload(
-    @SerialName("0") val action: Int,
-    @SerialName("1") val scope: Int,
-    @SerialName("2") val reason: String? = null,
-    @SerialName("3") val durationSeconds: Int? = null
-)
-
-@Serializable
-data class DisconnectPayload(
-    @SerialName("0") val reason: String
-)
-
-@Serializable
-class EmptyPayload
+fun createCbor(): Cbor = Cbor {
+    preferCborLabelsOverNames = true
+    ignoreUnknownKeys = true
+    encodeDefaults = false
+}
