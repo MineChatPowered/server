@@ -23,7 +23,36 @@ The plugin works by generating temporary codes that players can use to authentic
    - Download the latest release from the [releases](https://github.com/walker84837/MineChat-Server/releases/latest) page.
    - Place the downloaded JAR file into your server's `plugins` directory.
 
-3. **Start Your Server**: Start or restart your Paper server to load the MineChat Server Plugin.
+3. **Generate a TLS keystore**:
+   MineChat requires TLS to be enabled. Generate a self-signed keystore:
+   ```bash
+   keytool -genkeypair \
+     -alias minechat \
+     -keyalg RSA \
+     -keysize 2048 \
+     -storetype JKS \
+     -keystore keystore.jks \
+     -validity 3650 \
+     -storepassword <your-password> \
+     -keypassword <your-password> \
+     -dname "CN=localhost, OU=Dev, O=MineChat, L=City, ST=State, C=US"
+   ```
+
+4. **Configure TLS**:
+   - Copy the generated `keystore.jks` to your server's plugin data folder:
+     ```
+     <server>/plugins/MineChat/keystore.jks
+     ```
+   - Edit the generated `config.yml` in the plugin folder, or create one with:
+     ```yaml
+     port: 25575
+     tls:
+       enabled: true
+       keystore: "keystore.jks"
+       keystore-password: "your-password"
+     ```
+
+5. **Start Your Server**: Start or restart your Paper server to load the MineChat Server Plugin.
 
 ## Usage
 
