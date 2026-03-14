@@ -119,11 +119,12 @@ class CommandRegister(private val services: PluginServices) : Listener {
 
         services.pluginInstance.lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
             val registrar = event.registrar()
-            registrar.register(linkCommand)
-            registrar.register(reloadCommand)
-            registrar.register(banCommand)
-            registrar.register(unbanCommand)
-            registrar.register(kickCommand)
+
+            registrar.register(linkCommand, "Generate a MineChat link code for your account.")
+            registrar.register(reloadCommand, "Reload the MineChat configuration and services.")
+            registrar.register(banCommand, "Ban a player from using MineChat.")
+            registrar.register(unbanCommand, "Remove a MineChat ban from a player.")
+            registrar.register(kickCommand, "Kick a player from the MineChat client.")
         }
     }
 
