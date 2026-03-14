@@ -43,19 +43,4 @@ class ClientStorage(boxStore: BoxStore) {
             clientCache.put(client.clientUuid, client)
         }
     }
-
-    // TODO: "Function "remove" is never used"
-    fun remove(clientUuid: String?, minecraftUsername: String?) {
-        if (clientUuid != null) {
-            clientCache.invalidate(clientUuid)
-            clientBox.query(Client_.clientUuid.equal(clientUuid)).build().remove()
-        }
-        if (minecraftUsername != null) {
-            val client = find(null, minecraftUsername)
-            if (client != null) {
-                clientCache.invalidate(client.clientUuid)
-                clientBox.remove(client.id)
-            }
-        }
-    }
 }

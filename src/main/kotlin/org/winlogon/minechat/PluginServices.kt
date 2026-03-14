@@ -8,6 +8,13 @@ import org.winlogon.minechat.storage.ClientStorage
 import org.winlogon.minechat.storage.LinkCodeStorage
 import java.util.concurrent.ConcurrentLinkedQueue
 
+/**
+ * Interface for plugin services and dependencies.
+ *
+ * This interface provides a centralized way to access all plugin services,
+ * including storage, configuration, and connected client management.
+ * It is implemented by [org.winlogon.minechat.MineChatPlugin].
+ */
 interface PluginServices {
     val pluginInstance: JavaPlugin
     val linkCodeStorage: LinkCodeStorage

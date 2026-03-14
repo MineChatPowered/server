@@ -12,9 +12,7 @@ import java.io.Closeable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-// TODO: "Constructor parameter is never used as a property"
-// TODO: use Closeable properly
-class LinkCodeStorage(private val boxStore: BoxStore) : Closeable {
+class LinkCodeStorage(boxStore: BoxStore) : Closeable {
     private val linkCodeBox: Box<LinkCode> = boxStore.boxFor(LinkCode::class.java)
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val linkCodeCache: Cache<String, LinkCode> = Caffeine.newBuilder()

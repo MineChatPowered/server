@@ -20,7 +20,18 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Logger
 
-// TODO: add brief kdoc documentation to the public functions
+/**
+ * Handles a client connection to the MineChat server.
+ *
+ * This class manages the connection lifecycle including:
+ * - Reading and writing packets using CBOR + zstd compression
+ * - Handling LINK/LINK_OK authentication flow
+ * - Processing chat messages and moderation actions
+ * - Sending periodic PING messages for keep-alive
+ *
+ * @param socket The client socket connection
+ * @param plugin The MineChat plugin instance
+ */
 class ClientConnection(
     private val socket: Socket,
     private val plugin: MineChatPlugin
@@ -62,6 +73,12 @@ class ClientConnection(
         }, 10, 10, TimeUnit.SECONDS)
     }
 
+    /**
+     * Main connection loop that processes incoming packets.
+     *
+     * This method runs continuously until the client disconnects
+     * or an error occurs, reading and processing MineChat protocol packets.
+     */
     @OptIn(ExperimentalSerializationApi::class)
     override fun run() {
         try {
@@ -199,32 +216,12 @@ class ClientConnection(
         }
     }
 
-    // TODO: "Function "sendMessage" is never used"
-    private fun sendMessage(packetType: Int, payload: CapabilitiesPayload) {
-        try {
-            val mineChatPacket = createPacket(packetType, payload)
-            sendPacket(mineChatPacket)
-        } catch (e: Exception) {
-            logger.warning("Error sending CapabilitiesPayload: ${e.message}")
-        }
-    }
-
     private fun sendMessage(packetType: Int, payload: AuthOkPayload) {
         try {
             val mineChatPacket = createPacket(packetType, payload)
             sendPacket(mineChatPacket)
         } catch (e: Exception) {
             logger.warning("Error sending AuthOkPayload: ${e.message}")
-        }
-    }
-
-    // TODO: "Function "sendMessage" is never used"
-    private fun sendMessage(packetType: Int, payload: ChatMessagePayload) {
-        try {
-            val mineChatPacket = createPacket(packetType, payload)
-            sendPacket(mineChatPacket)
-        } catch (e: Exception) {
-            logger.warning("Error sending ChatMessagePayload: ${e.message}")
         }
     }
 
