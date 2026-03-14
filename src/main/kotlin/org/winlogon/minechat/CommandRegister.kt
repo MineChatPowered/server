@@ -17,7 +17,7 @@ import org.bukkit.event.Listener
 import org.winlogon.minechat.entities.Ban
 import org.winlogon.minechat.entities.LinkCode
 
-class MineChatCommandRegister(private val services: PluginServices) : Listener {
+class CommandRegister(private val services: PluginServices) : Listener {
     fun registerCommands() {
         val linkCommand = Commands.literal("link")
             .requires { sender -> sender.executor is Player }

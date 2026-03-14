@@ -14,6 +14,6 @@ tls:
   # If enabled, you must provide a keystore.
   enabled: true
   # The name of the keystore file in the plugin's data folder.
-  keystore: "keystore.jks"
+  keystore: "keystore.p12"
   # The password for the keystore.
   keystore-password: "password"

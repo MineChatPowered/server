@@ -2,4 +2,4 @@
 kotlinx-serialization-json = "1.10.0"
 kotlinx-serialization-cbor = "1.10.0"
 kaml = "0.102.0"
-caffeine = "3.1.8"
+caffeine = "3.2.0"

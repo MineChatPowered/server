@@ -24,33 +24,34 @@ The plugin works by generating temporary codes that players can use to authentic
    - Place the downloaded JAR file into your server's `plugins` directory.
 
 3. **Generate a TLS keystore**:
-   MineChat requires TLS to be enabled. Generate a self-signed keystore:
+   MineChat requires TLS to be enabled. Generate a self-signed keystore using modern algorithms (EC secp384r1):
    ```bash
    keytool -genkeypair \
      -alias minechat \
-     -keyalg RSA \
-     -keysize 2048 \
-     -storetype JKS \
-     -keystore keystore.jks \
+     -keyalg EC \
+     -keysize 384 \
+     -storetype PKCS12 \
+     -keystore keystore.p12 \
      -validity 3650 \
-     -storepassword <your-password> \
-     -keypassword <your-password> \
+     -storepass <your-password> \
+     -keypass <your-password> \
      -dname "CN=localhost, OU=Dev, O=MineChat, L=City, ST=State, C=US"
    ```
 
 4. **Configure TLS**:
-   - Copy the generated `keystore.jks` to your server's plugin data folder:
+   - Copy the generated `keystore.p12` to your server's plugin data folder:
      ```
-     <server>/plugins/MineChat/keystore.jks
+     <server>/plugins/MineChat/keystore.p12
      ```
    - Edit the generated `config.yml` in the plugin folder, or create one with:
      ```yaml
      port: 25575
      tls:
        enabled: true
-       keystore: "keystore.jks"
+       keystore: "keystore.p12"
        keystore-password: "your-password"
      ```
+   - **Note**: The server enforces TLS 1.3 for maximum security.
 
 5. **Start Your Server**: Start or restart your Paper server to load the MineChat Server Plugin.
 
@@ -71,13 +72,13 @@ The plugin works by generating temporary codes that players can use to authentic
 
 ## How it works
 
-- **Initial phase**:  
+- **Initial phase**:
   The plugin opens a server socket on port `25575` to listen for connections from MineChat clients.
 
 - **Authentication**:
   - Clients use either a new link code or their stored client UUID to authenticate.
   - Successful authentication triggers in-game notifications (join/leave messages) to all players.
-  
+
 - **Message broadcasting**:
   - The plugin listens for in-game chat events and broadcasts messages to connected clients.
   - Similarly, messages received from clients are broadcast to the Minecraft chat.

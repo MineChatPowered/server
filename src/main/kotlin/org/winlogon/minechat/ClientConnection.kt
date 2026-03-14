@@ -20,9 +20,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Logger
 
+// TODO: add brief kdoc documentation to the public functions
 class ClientConnection(
     private val socket: Socket,
-    private val plugin: MineChatServerPlugin
+    private val plugin: MineChatPlugin
 ) : Runnable {
     companion object {
         const val MINECHAT_PREFIX_STRING = "&8[&3MineChat&8]"
@@ -198,6 +199,7 @@ class ClientConnection(
         }
     }
 
+    // TODO: "Function "sendMessage" is never used"
     private fun sendMessage(packetType: Int, payload: CapabilitiesPayload) {
         try {
             val mineChatPacket = createPacket(packetType, payload)
@@ -216,6 +218,7 @@ class ClientConnection(
         }
     }
 
+    // TODO: "Function "sendMessage" is never used"
     private fun sendMessage(packetType: Int, payload: ChatMessagePayload) {
         try {
             val mineChatPacket = createPacket(packetType, payload)

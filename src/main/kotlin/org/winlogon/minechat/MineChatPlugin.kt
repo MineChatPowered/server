@@ -4,18 +4,18 @@ import com.charleskorn.kaml.Yaml
 
 import io.objectbox.BoxStore
 import io.papermc.paper.event.player.AsyncChatEvent
-import org.winlogon.minechat.storage.BanStorage
-import org.winlogon.minechat.storage.ClientStorage
-import org.winlogon.minechat.storage.LinkCodeStorage
-import org.winlogon.minechat.entities.MyObjectBox
 
 import net.kyori.adventure.text.minimessage.MiniMessage
 
+import org.bukkit.Bukkit
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.permissions.Permission
 import org.bukkit.plugin.java.JavaPlugin
-import org.bukkit.Bukkit
+import org.winlogon.minechat.entities.MyObjectBox
+import org.winlogon.minechat.storage.BanStorage
+import org.winlogon.minechat.storage.ClientStorage
+import org.winlogon.minechat.storage.LinkCodeStorage
 
 import java.io.File
 import java.net.ServerSocket
@@ -25,10 +25,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
-
+import javax.net.ssl.SSLServerSocket
 import kotlinx.serialization.decodeFromString
 
-class MineChatServerPlugin : JavaPlugin(), PluginServices {
+class MineChatPlugin : JavaPlugin(), PluginServices {
     private var serverSocket: ServerSocket? = null
     private var isFolia: Boolean = false
     private lateinit var boxStore: BoxStore
@@ -94,7 +94,7 @@ class MineChatServerPlugin : JavaPlugin(), PluginServices {
         clientStorage = ClientStorage(boxStore)
         banStorage = BanStorage(boxStore)
 
-        MineChatCommandRegister(this).registerCommands()
+        CommandRegister(this).registerCommands()
 
         if (!mineChatConfig.tls.enabled) {
             loggerProvider.logger.severe("MineChat server cannot start: TLS is disabled in config.yml, but it is mandatory.")
@@ -110,7 +110,7 @@ class MineChatServerPlugin : JavaPlugin(), PluginServices {
         }
 
         try {
-            val keyStore = KeyStore.getInstance("JKS")
+            val keyStore = KeyStore.getInstance("PKCS12")
             keyStore.load(keystoreFile.inputStream(), keystorePassword)
 
             val keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
@@ -121,7 +121,11 @@ class MineChatServerPlugin : JavaPlugin(), PluginServices {
 
             val sslServerSocketFactory = sslContext.serverSocketFactory
             serverSocket = sslServerSocketFactory.createServerSocket(mineChatConfig.port)
-            loggerProvider.logger.info("MineChat server started with TLS on port ${mineChatConfig.port}")
+
+            // Enforce TLS 1.3
+            (serverSocket as SSLServerSocket).enabledProtocols = arrayOf("TLSv1.3")
+
+            loggerProvider.logger.info("MineChat server started with TLS 1.3 on port ${mineChatConfig.port}")
         } catch (e: Exception) {
             loggerProvider.logger.severe("MineChat server cannot start: Failed to initialize TLS: ${e.message}. TLS is mandatory as per specification.")
             e.printStackTrace()
@@ -153,7 +157,7 @@ class MineChatServerPlugin : JavaPlugin(), PluginServices {
         server.pluginManager.registerEvents(object : Listener {
             @EventHandler
             fun onChat(event: AsyncChatEvent) {
-                this@MineChatServerPlugin.onChat(event)
+                this@MineChatPlugin.onChat(event)
             }
         }, this)
     }
@@ -169,7 +173,7 @@ class MineChatServerPlugin : JavaPlugin(), PluginServices {
     }
 
     override fun onDisable() {
-        loggerProvider.logger.info("Disabling MineChatServerPlugin")
+        loggerProvider.logger.info("Disabling MineChatPlugin")
         isServerRunning = false
         serverThread?.interrupt()
         serverSocket?.close()

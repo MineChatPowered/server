@@ -7,11 +7,14 @@ import io.objectbox.Box
 import io.objectbox.BoxStore
 import org.winlogon.minechat.entities.LinkCode
 import org.winlogon.minechat.entities.LinkCode_
+import java.io.Closeable
 
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-class LinkCodeStorage(private val boxStore: BoxStore) {
+// TODO: "Constructor parameter is never used as a property"
+// TODO: use Closeable properly
+class LinkCodeStorage(private val boxStore: BoxStore) : Closeable {
     private val linkCodeBox: Box<LinkCode> = boxStore.boxFor(LinkCode::class.java)
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val linkCodeCache: Cache<String, LinkCode> = Caffeine.newBuilder()
@@ -49,7 +52,7 @@ class LinkCodeStorage(private val boxStore: BoxStore) {
         linkCodeCache.asMap().values.removeIf { it.expiresAt < now }
     }
 
-    fun close() {
+    override fun close() {
         scheduler.shutdown()
     }
 }

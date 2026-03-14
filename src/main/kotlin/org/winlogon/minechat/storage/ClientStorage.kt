@@ -44,6 +44,7 @@ class ClientStorage(boxStore: BoxStore) {
         }
     }
 
+    // TODO: "Function "remove" is never used"
     fun remove(clientUuid: String?, minecraftUsername: String?) {
         if (clientUuid != null) {
             clientCache.invalidate(clientUuid)
