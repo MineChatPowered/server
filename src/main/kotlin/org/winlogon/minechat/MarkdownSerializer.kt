@@ -7,9 +7,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.ComponentSerializer
 
 class MarkdownSerializer : ComponentSerializer<Component, Component, String> {
-    override fun deserialize(input: String): Component {
-        return parseMarkdown(input)
-    }
+    override fun deserialize(input: String): Component = parseMarkdown(input)
 
     override fun serialize(component: Component): String {
         val sb = StringBuilder()
@@ -20,103 +18,119 @@ class MarkdownSerializer : ComponentSerializer<Component, Component, String> {
     private fun parseMarkdown(input: String): Component {
         if (input.isEmpty()) return Component.empty()
 
-        val builder = Component.text()
-        var remaining = input
-        var currentText = StringBuilder()
+        val builder = Component.text() // builder to accumulate components
+        val buffer = StringBuilder()
+        var i = 0
+        val n = input.length
 
-        while (remaining.isNotEmpty()) {
+        fun flushBuffer() {
+            if (buffer.isNotEmpty()) {
+                builder.append(Component.text(buffer.toString()))
+                buffer.setLength(0)
+            }
+        }
+
+        fun appendDecorated(text: String, vararg decorations: TextDecoration) {
+            var comp = Component.text(text)
+            for (dec in decorations) comp = comp.decorate(dec)
+            builder.append(comp)
+        }
+
+        // helper to find closing token start index, returns -1 if not found
+        fun findClosing(startIndex: Int, token: String): Int =
+            input.indexOf(token, startIndex + token.length).also { if (it == -1) { /* not found */ } }
+
+        while (i < n) {
+            // Try multi-char tokens first
             when {
-                remaining.startsWith("**") -> {
-                    if (currentText.isNotEmpty()) {
-                        builder.append(Component.text(currentText.toString()))
-                        currentText = StringBuilder()
-                    }
-                    val endIndex = remaining.indexOf("**", 2)
-                    if (endIndex != -1) {
-                        val boldContent = remaining.substring(2, endIndex)
-                        builder.append(Component.text(boldContent).decorate(TextDecoration.BOLD))
-                        remaining = remaining.substring(endIndex + 2)
+                input.startsWith("**", i) -> {
+                    val close = findClosing(i, "**")
+                    if (close != -1) {
+                        flushBuffer()
+                        val content = input.substring(i + 2, close)
+                        appendDecorated(content, TextDecoration.BOLD)
+                        i = close + 2
                     } else {
-                        currentText.append(remaining.take(2))
-                        remaining = remaining.substring(2)
+                        // treat literally
+                        buffer.append("**")
+                        i += 2
                     }
                 }
-                remaining.startsWith("~~") -> {
-                    if (currentText.isNotEmpty()) {
-                        builder.append(Component.text(currentText.toString()))
-                        currentText = StringBuilder()
-                    }
-                    val endIndex = remaining.indexOf("~~", 2)
-                    if (endIndex != -1) {
-                        val strikeContent = remaining.substring(2, endIndex)
-                        builder.append(Component.text(strikeContent).decorate(TextDecoration.STRIKETHROUGH))
-                        remaining = remaining.substring(endIndex + 2)
+
+                input.startsWith("~~", i) -> {
+                    val close = findClosing(i, "~~")
+                    if (close != -1) {
+                        flushBuffer()
+                        val content = input.substring(i + 2, close)
+                        appendDecorated(content, TextDecoration.STRIKETHROUGH)
+                        i = close + 2
                     } else {
-                        currentText.append(remaining.take(2))
-                        remaining = remaining.substring(2)
+                        buffer.append("~~")
+                        i += 2
                     }
                 }
-                remaining.startsWith("*") -> {
-                    if (currentText.isNotEmpty()) {
-                        builder.append(Component.text(currentText.toString()))
-                        currentText = StringBuilder()
-                    }
-                    val endIndex = remaining.indexOf("*", 1)
-                    if (endIndex > 1) {
-                        val italicContent = remaining.substring(1, endIndex)
-                        builder.append(Component.text(italicContent).decorate(TextDecoration.ITALIC))
-                        remaining = remaining.substring(endIndex + 1)
+
+                // Single-char tokens
+                input[i] == '*' -> {
+                    // avoid matching "**" (already handled)
+                    val close = input.indexOf('*', i + 1)
+                    if (close != -1) {
+                        flushBuffer()
+                        val content = input.substring(i + 1, close)
+                        appendDecorated(content, TextDecoration.ITALIC)
+                        i = close + 1
                     } else {
-                        currentText.append(remaining.take(1))
-                        remaining = remaining.substring(1)
+                        buffer.append('*')
+                        i++
                     }
                 }
-                remaining.startsWith("`") -> {
-                    if (currentText.isNotEmpty()) {
-                        builder.append(Component.text(currentText.toString()))
-                        currentText = StringBuilder()
-                    }
-                    val endIndex = remaining.indexOf("`", 1)
-                    if (endIndex != -1) {
-                        val codeContent = remaining.substring(1, endIndex)
-                        builder.append(Component.text(codeContent).color(NamedTextColor.GRAY))
-                        remaining = remaining.substring(endIndex + 1)
+
+                input[i] == '`' -> {
+                    val close = input.indexOf('`', i + 1)
+                    if (close != -1) {
+                        flushBuffer()
+                        val content = input.substring(i + 1, close)
+                        // inline code — gray color in original
+                        builder.append(Component.text(content).color(NamedTextColor.GRAY))
+                        i = close + 1
                     } else {
-                        currentText.append(remaining.take(1))
-                        remaining = remaining.substring(1)
+                        buffer.append('`')
+                        i++
                     }
                 }
+
                 else -> {
-                    currentText.append(remaining.first())
-                    remaining = remaining.substring(1)
+                    buffer.append(input[i])
+                    i++
                 }
             }
         }
 
-        if (currentText.isNotEmpty()) {
-            builder.append(Component.text(currentText.toString()))
-        }
-
+        flushBuffer()
         return builder.build()
     }
 
     private fun serializeComponent(component: Component, sb: StringBuilder) {
+        // If this is a TextComponent, write markers for active decorations
         if (component is TextComponent) {
-            val hasBold = component.hasDecoration(TextDecoration.BOLD)
-            val hasItalic = component.hasDecoration(TextDecoration.ITALIC)
-            val hasStrikethrough = component.hasDecoration(TextDecoration.STRIKETHROUGH)
+            val bold = component.hasDecoration(TextDecoration.BOLD)
+            val italic = component.hasDecoration(TextDecoration.ITALIC)
+            val strike = component.hasDecoration(TextDecoration.STRIKETHROUGH)
 
-            if (hasBold) sb.append("**")
-            if (hasItalic) sb.append("*")
-            if (hasStrikethrough) sb.append("~~")
+            // openers (fixed order)
+            if (bold) sb.append("**")
+            if (italic) sb.append("*")
+            if (strike) sb.append("~~")
 
             sb.append(component.content())
 
-            if (hasStrikethrough) sb.append("~~")
-            if (hasItalic) sb.append("*")
-            if (hasBold) sb.append("**")
+            // closers in reverse order
+            if (strike) sb.append("~~")
+            if (italic) sb.append("*")
+            if (bold) sb.append("**")
         }
 
+        // serialize children
         for (child in component.children()) {
             serializeComponent(child, sb)
         }

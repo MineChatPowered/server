@@ -3,7 +3,6 @@ package org.winlogon.minechat
 import com.github.luben.zstd.Zstd
 import kotlinx.serialization.ExperimentalSerializationApi
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 
 import org.bukkit.Bukkit
@@ -19,13 +18,11 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.ExecutorService
 import java.util.logging.Logger
 
 class ClientConnection(
     private val socket: Socket,
-    private val plugin: MineChatServerPlugin,
-    private val executorService: ExecutorService
+    private val plugin: MineChatServerPlugin
 ) : Runnable {
     companion object {
         const val MINECHAT_PREFIX_STRING = "&8[&3MineChat&8]"
@@ -418,7 +415,7 @@ class ClientConnection(
         if (format == "commonmark") {
             // Parse commonmark and send to Minecraft
             val component = try {
-                MiniMessage.miniMessage().deserialize(content)
+                plugin.miniMessage.deserialize(content)
             } catch (e: Exception) {
                 logger.warning("Failed to parse MiniMessage: ${e.message}")
                 Component.text(content)
@@ -441,7 +438,7 @@ class ClientConnection(
 
     private fun broadcastMinecraft(gradient: Pair<String, String>, message: String) {
         val gradientColor = "<gradient:${gradient.first}:${gradient.second}>$message"
-        val component = MiniMessage.miniMessage().deserialize(gradientColor)
+        val component = plugin.miniMessage.deserialize(gradientColor)
         broadcastMinecraft(formatPrefixed(component))
     }
 

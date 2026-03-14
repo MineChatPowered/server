@@ -136,7 +136,7 @@ class MineChatServerPlugin : JavaPlugin(), PluginServices {
                     val socket = serverSocket?.accept()
                     if (socket != null) {
                         loggerProvider.logger.info("Client connected: ${socket.inetAddress}")
-                        val connection = ClientConnection(socket, this, executorService)
+                        val connection = ClientConnection(socket, this)
                         connectedClients.add(connection)
                         executorService.submit(connection)
                     }
