@@ -12,6 +12,13 @@ class ClientStorage(boxStore: BoxStore) {
     private val clientBox: Box<Client> = boxStore.boxFor(Client::class.java)
     private val clientCache: Cache<String, Client> = Caffeine.newBuilder().build()
 
+    /**
+     * Finds a client by either client UUID or Minecraft username.
+     *
+     * @param clientUuid The client UUID to search for (optional)
+     * @param minecraftUsername The Minecraft username to search for (optional)
+     * @return The matching Client, or null if not found. At least one parameter must be provided.
+     */
     fun find(clientUuid: String?, minecraftUsername: String?): Client? {
         if (clientUuid != null) {
             return clientCache.getIfPresent(clientUuid) ?: run {
