@@ -4,6 +4,7 @@ import com.github.luben.zstd.Zstd
 import kotlinx.serialization.ExperimentalSerializationApi
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 
 import org.bukkit.Bukkit
 import org.winlogon.minechat.entities.Ban
@@ -426,6 +427,16 @@ class ClientConnection(
                 plugin.miniMessage.deserialize(content)
             } catch (e: Exception) {
                 logger.warning("Failed to parse MiniMessage: ${e.message}")
+                Component.text(content)
+            }
+
+            broadcastMinecraft(formatPrefixed(component, username))
+        } else if (format == "components") {
+            // Parse JSON component format and send to Minecraft
+            val component = try {
+                GsonComponentSerializer.gson().deserialize(content)
+            } catch (e: Exception) {
+                logger.warning("Failed to parse JSON component: ${e.message}")
                 Component.text(content)
             }
 
