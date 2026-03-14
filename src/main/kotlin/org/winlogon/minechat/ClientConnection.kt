@@ -291,10 +291,13 @@ class ClientConnection(
         } catch (_: Exception) {}
     }
 
-    fun formatPrefixed(message: Component): Component {
-        return MINECHAT_PREFIX_COMPONENT
-            .append(Component.space())
-            .append(message)
+    fun formatPrefixed(message: Component, username: String? = null): Component {
+        val c = MINECHAT_PREFIX_COMPONENT.append(Component.space())
+        return if (username != null) {
+            c.append(Component.text("$username: ")).append(message)
+        } else {
+            c.append(message)
+        }
     }
 
     private fun handleAuth(payload: LinkPayload) {
@@ -410,6 +413,9 @@ class ClientConnection(
     private fun handleChat(payload: ChatMessagePayload) {
         if (this.client == null) return
 
+        // Get the username for prefixing
+        val username = this.client?.minecraftUsername ?: return
+
         // Process the chat message
         val format = payload.format
         val content = payload.content
@@ -423,7 +429,7 @@ class ClientConnection(
                 Component.text(content)
             }
 
-            broadcastMinecraft(formatPrefixed(component))
+            broadcastMinecraft(formatPrefixed(component, username))
         }
     }
 
