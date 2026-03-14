@@ -80,29 +80,26 @@ repositories {
     mavenCentral()
 }
 
-// TODO: move these to libs.versions.toml
 dependencies {
-    compileOnly("com.github.ben-manes.caffeine:caffeine:3.2.0")
-    compileOnly("com.github.luben:zstd-jni:1.5.6-1")
+    compileOnly(libs.caffeine)
+    compileOnly(libs.zstd.jni)
 
-    compileOnly("io.objectbox:objectbox-kotlin:3.8.0")
-    compileOnly("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")
-    // is this needed?
-    compileOnly("org.jetbrains.kotlin:kotlin-reflect:2.1.10")
-    compileOnly("org.winlogon:asynccraftr:0.1.0")
-    implementation("com.charleskorn.kaml:kaml:" + libs.versions.kaml.get())
+    compileOnly(libs.objectbox.kotlin)
+    compileOnly(libs.paper.api)
+    compileOnly(libs.kotlin.reflect)
+    compileOnly(libs.asynccraftr)
+    implementation(libs.kaml)
 
-    // TODO: is this actually used anywhere?
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:2.17.1")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.1")
+    implementation(libs.jackson.dataformat.cbor)
+    implementation(libs.jackson.module.kotlin)
 
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:" + libs.versions.kotlinx.serialization.json.get())
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-cbor:" + libs.versions.kotlinx.serialization.cbor.get())
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.serialization.cbor)
 
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
-    testImplementation("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
-    testImplementation("org.jetbrains.kotlin:kotlin-test:2.1.10")
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.paper.api.test)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.kotlin.test)
 }
 
 tasks.test {
@@ -126,7 +123,6 @@ tasks.shadowJar {
     minimize()
 }
 
-// Disable jar and replace with shadowJar
 tasks.jar {
     enabled = false
 }
@@ -135,7 +131,6 @@ tasks.assemble {
     dependsOn(tasks.shadowJar)
 }
 
-// Utility tasks
 tasks.register("printProjectName") {
     doLast {
         println(projectName)

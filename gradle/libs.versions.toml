@@ -3,3 +3,27 @@ kotlinx-serialization-json = "1.10.0"
 kotlinx-serialization-cbor = "1.10.0"
 kaml = "0.102.0"
 caffeine = "3.2.0"
+zstd-jni = "1.5.6-1"
+objectbox = "3.8.0"
+paper = "1.21.6-R0.1-SNAPSHOT"
+kotlin = "2.1.10"
+asynccraftr = "0.1.0"
+jackson = "2.17.1"
+junit = "1.11.4"
+
+[libraries]
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
+zstd-jni = { module = "com.github.luben:zstd-jni", version.ref = "zstd-jni" }
+objectbox-kotlin = { module = "io.objectbox:objectbox-kotlin", version.ref = "objectbox" }
+paper-api = { module = "io.papermc.paper:paper-api", version.ref = "paper" }
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+asynccraftr = { module = "org.winlogon:asynccraftr", version.ref = "asynccraftr" }
+kaml = { module = "com.charleskorn.kaml:kaml", version.ref = "kaml" }
+jackson-dataformat-cbor = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-cbor", version.ref = "jackson" }
+jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
+kotlinx-serialization-cbor = { module = "org.jetbrains.kotlinx:kotlinx-serialization-cbor", version.ref = "kotlinx-serialization-cbor" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
+paper-api-test = { module = "io.papermc.paper:paper-api", version.ref = "paper" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
