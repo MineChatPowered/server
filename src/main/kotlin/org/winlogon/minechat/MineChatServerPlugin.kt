@@ -10,7 +10,6 @@ import org.winlogon.minechat.storage.LinkCodeStorage
 import org.winlogon.minechat.entities.MyObjectBox
 
 import net.kyori.adventure.text.minimessage.MiniMessage
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -28,9 +27,8 @@ import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.serializer
 
-class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
+class MineChatServerPlugin : JavaPlugin(), PluginServices {
     private var serverSocket: ServerSocket? = null
     private var isFolia: Boolean = false
     private lateinit var boxStore: BoxStore
@@ -196,9 +194,9 @@ class MineChatServerPlugin : JavaPlugin(), MineChatPluginServices {
         connectedClients.forEach { client ->
             try {
                 val mineChatPacket = MineChatPacket(packetType, payload)
-                val serialized = cbor.encodeToByteArray(MineChatPacketSerializer, mineChatPacket)
+                val serialized = cbor.encodeToByteArray(MineChatPacket, mineChatPacket)
                 val compressed = com.github.luben.zstd.Zstd.compress(serialized)
-                
+
                 client.writer.writeInt(serialized.size)
                 client.writer.writeInt(compressed.size)
                 client.writer.write(compressed)

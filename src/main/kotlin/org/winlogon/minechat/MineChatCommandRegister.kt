@@ -1,3 +1,5 @@
+@file:Suppress("UnstableApiUsage")
+
 package org.winlogon.minechat
 
 import com.mojang.brigadier.Command
@@ -15,7 +17,7 @@ import org.bukkit.event.Listener
 import org.winlogon.minechat.entities.Ban
 import org.winlogon.minechat.entities.LinkCode
 
-class MineChatCommandRegister(private val services: MineChatPluginServices) : Listener {
+class MineChatCommandRegister(private val services: PluginServices) : Listener {
     fun registerCommands() {
         val linkCommand = Commands.literal("link")
             .requires { sender -> sender.executor is Player }
@@ -26,12 +28,12 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
             }
             .build()
 
-        val reloadCommand = Commands.literal("mchatreload")
+        val reloadCommand = Commands.literal("minechat-reload")
             .requires { sender -> sender.sender.hasPermission(services.permissions["reload"]!!) }
             .executes { ctx ->
                 services.reloadConfigAndDependencies()
                 ctx.source.sender.sendMessage(Component.text("MineChat config reloaded.").color(NamedTextColor.GREEN))
-                
+
                 val infoMsg = "MineChat configuration has been reloaded by an administrator."
                 val chatPayload = ChatMessagePayload(
                     format = "commonmark",
@@ -55,7 +57,7 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
                     val reason = "Banned by an operator."
                     val ban = Ban(minecraftUsername = playerName, reason = reason)
                     services.banStorage.add(ban)
-                    
+
                     // Notify other clients
                     val modPayload = ModerationPayload(
                         action = ModerationAction.BAN,
@@ -63,10 +65,10 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
                         reason = reason
                     )
                     services.broadcastToClients(PacketTypes.MODERATION, modPayload)
-                    
+
                     // Disconnect the client if online
                     getClientConnection(playerName)?.disconnect(reason)
-                    
+
                     ctx.source.sender.sendMessage(Component.text("Banned $playerName from MineChat.").color(NamedTextColor.GREEN))
                     Command.SINGLE_SUCCESS
                 }
@@ -92,11 +94,11 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
                     val playerName = StringArgumentType.getString(ctx, "player")
                     val clientConnection = this.getClientConnection(playerName)
                     if (clientConnection == null) {
-                        ctx.source.sender.sendMessage(Component.text("Player not found or not connected via MineChat.").color(NamedTextColor.RED))
+                        ctx.source.sender.sendRichMessage("<red>Player not found or not connected via MineChat.</red>")
                         return@executes 0
                     }
                     val reason = "Kicked by an operator."
-                    
+
                     // Notify other clients
                     val modPayload = ModerationPayload(
                         action = ModerationAction.KICK,
@@ -104,9 +106,12 @@ class MineChatCommandRegister(private val services: MineChatPluginServices) : Li
                         reason = reason
                     )
                     services.broadcastToClients(PacketTypes.MODERATION, modPayload)
-                    
+
                     clientConnection.disconnect(reason)
-                    ctx.source.sender.sendMessage(Component.text("Kicked $playerName from MineChat.").color(NamedTextColor.GREEN))
+                    ctx.source.sender.sendRichMessage(
+                        "<green>Kicked <player> from MineChat.</green>",
+                        Placeholder.unparsed("player", playerName)
+                    )
                     Command.SINGLE_SUCCESS
                 }
             )

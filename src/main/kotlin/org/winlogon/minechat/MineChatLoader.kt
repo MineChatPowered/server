@@ -1,3 +1,5 @@
+@file:Suppress("UnstableApiUsage")
+
 package org.winlogon.minechat
 
 import io.papermc.paper.plugin.loader.PluginClasspathBuilder

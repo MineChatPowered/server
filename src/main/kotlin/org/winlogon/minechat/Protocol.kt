@@ -5,8 +5,6 @@ package org.winlogon.minechat
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.cbor.Cbor
 import kotlinx.serialization.cbor.CborLabel
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -52,145 +50,104 @@ object ChatGradients {
 @Serializable
 sealed class PacketPayload
 
-@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-@SerialName("link")
 data class LinkPayload(
-    @CborLabel(0)
     val linking_code: String,
-    @CborLabel(1)
     val client_uuid: String
 ) : PacketPayload()
 
-@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-@SerialName("link_ok")
 data class LinkOkPayload(
-    @CborLabel(0)
     val minecraft_uuid: String
 ) : PacketPayload()
 
-@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-@SerialName("capabilities")
 data class CapabilitiesPayload(
-    @CborLabel(0)
     val supports_components: Boolean
 ) : PacketPayload()
 
-@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-@SerialName("auth_ok")
 class AuthOkPayload : PacketPayload()
 
-@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-@SerialName("chat_message")
 data class ChatMessagePayload(
-    @CborLabel(0)
     val format: String,
-    @CborLabel(1)
     val content: String
 ) : PacketPayload()
 
-@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-@SerialName("ping")
 data class PingPayload(
-    @CborLabel(0)
     val timestamp_ms: Long
 ) : PacketPayload()
 
-@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-@SerialName("pong")
 data class PongPayload(
-    @CborLabel(0)
     val timestamp_ms: Long
 ) : PacketPayload()
 
-@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-@SerialName("moderation")
 data class ModerationPayload(
-    @CborLabel(0)
     val action: Int,
-    @CborLabel(1)
     val scope: Int,
-    @CborLabel(2)
     val reason: String? = null,
-    @CborLabel(3)
     val duration_seconds: Int? = null
 ) : PacketPayload()
 
-@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-@SerialName("disconnect")
 data class DisconnectPayload(
-    @CborLabel(0)
     val reason: String
 ) : PacketPayload()
 
-@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-@SerialName("empty")
 class EmptyPayload : PacketPayload()
 
-@OptIn(ExperimentalSerializationApi::class)
 data class MineChatPacket(
-    val packetType: Int,
-    val payload: PacketPayload
+    @CborLabel(0) val packetType: Int,
+    @CborLabel(1) val payload: PacketPayload
 ) {
-    companion object {
-        val serializer = MineChatPacketSerializer
-    }
-}
-
-@OptIn(ExperimentalSerializationApi::class)
-object MineChatPacketSerializer : KSerializer<MineChatPacket> {
-    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("MineChatPacket") {
-        element<Int>("packetType")
-        element<PacketPayload>("payload")
-    }
-
-    override fun serialize(encoder: Encoder, value: MineChatPacket) {
-        encoder.encodeStructure(descriptor) {
-            encodeIntElement(descriptor, 0, value.packetType)
-            @Suppress("UNCHECKED_CAST")
-            encodeSerializableElement(
-                descriptor, 1, 
-                payloadSerializer(value.packetType) as kotlinx.serialization.SerializationStrategy<PacketPayload>, 
-                value.payload
-            )
+    companion object : KSerializer<MineChatPacket> {
+        private val packetDescriptor = buildClassSerialDescriptor("MineChatPacket") {
+            element<Int>("packetType", annotations = listOf(CborLabel(0)))
+            element<PacketPayload>("payload", annotations = listOf(CborLabel(1)))
         }
-    }
 
-    override fun deserialize(decoder: Decoder): MineChatPacket {
-        return decoder.decodeStructure(descriptor) {
-            var packetType: Int? = null
-            var payload: PacketPayload? = null
+        override val descriptor: SerialDescriptor get() = packetDescriptor
 
-            while (true) {
-                when (decodeElementIndex(descriptor)) {
-                    0 -> packetType = decodeIntElement(descriptor, 0)
-                    1 -> {
-                        val pt = packetType ?: throw SerializationException("packetType must be before payload")
-                        payload = decodeSerializableElement(descriptor, 1, payloadSerializer(pt))
+        override fun serialize(encoder: Encoder, value: MineChatPacket) {
+            encoder.encodeStructure(packetDescriptor) {
+                encodeIntElement(packetDescriptor, 0, value.packetType)
+                @Suppress("UNCHECKED_CAST")
+                encodeSerializableElement(
+                    packetDescriptor, 1,
+                    getPayloadSerializer(value.packetType) as kotlinx.serialization.SerializationStrategy<PacketPayload>,
+                    value.payload
+                )
+            }
+        }
+
+        override fun deserialize(decoder: Decoder): MineChatPacket {
+            var packetType = 0
+            var payload: PacketPayload = EmptyPayload()
+
+            decoder.decodeStructure(packetDescriptor) {
+                while (true) {
+                    when (decodeElementIndex(packetDescriptor)) {
+                        0 -> packetType = decodeIntElement(packetDescriptor, 0)
+                        1 -> {
+                            @Suppress("UNCHECKED_CAST")
+                            payload = decodeSerializableElement(
+                                packetDescriptor, 1,
+                                getPayloadSerializer(packetType) as kotlinx.serialization.DeserializationStrategy<PacketPayload>
+                            )
+                        }
+                        CompositeDecoder.DECODE_DONE -> break
                     }
-                    CompositeDecoder.DECODE_DONE -> break
-                    else -> throw SerializationException("Unknown index")
                 }
             }
-
-            if (packetType == null) throw SerializationException("Missing packetType")
-            if (payload == null) throw SerializationException("Missing payload")
-
-            MineChatPacket(packetType, payload)
+            return MineChatPacket(packetType, payload)
         }
-    }
 
-    private fun payloadSerializer(packetType: Int): KSerializer<out PacketPayload> {
-        return when (packetType) {
+        private fun getPayloadSerializer(type: Int): KSerializer<out PacketPayload> = when (type) {
             PacketTypes.LINK -> LinkPayload.serializer()
             PacketTypes.LINK_OK -> LinkOkPayload.serializer()
             PacketTypes.CAPABILITIES -> CapabilitiesPayload.serializer()

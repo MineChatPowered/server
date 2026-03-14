@@ -85,7 +85,7 @@ repositories {
 
 dependencies {
     compileOnly("com.github.ben-manes.caffeine:caffeine:3.2.0")
-    compileOnly("com.github.luben:zstd-jni:1.5.6-1")
+    implementation("com.github.luben:zstd-jni:1.5.6-1")
     // idt this is needed
     // compileOnly("com.google.code.gson:gson:2.11.0")
     compileOnly("io.objectbox:objectbox-kotlin:3.8.0")

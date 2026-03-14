@@ -8,7 +8,7 @@ import org.winlogon.minechat.storage.ClientStorage
 import org.winlogon.minechat.storage.LinkCodeStorage
 import java.util.concurrent.ConcurrentLinkedQueue
 
-interface MineChatPluginServices {
+interface PluginServices {
     val pluginInstance: JavaPlugin
     val linkCodeStorage: LinkCodeStorage
     val clientStorage: ClientStorage
