@@ -7,3 +7,13 @@ port: 25575
 # The time in minutes before a link code expires.
 # Default: 5
 expiry-code-minutes: 5
+
+# TLS settings for the server.
+tls:
+  # Enable or disable TLS.
+  # If enabled, you must provide a keystore.
+  enabled: true
+  # The name of the keystore file in the plugin's data folder.
+  keystore: "keystore.p12"
+  # The password for the keystore.
+  keystore-password: "password"

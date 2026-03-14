@@ -1,10 +1,20 @@
-import java.text.SimpleDateFormat
-import java.util.*
+buildscript {
+    repositories {
+        mavenCentral()
+        maven { url = uri("https://download.objectbox.io/maven") }
+    }
+    dependencies {
+        classpath("io.objectbox:objectbox-gradle-plugin:3.8.0")
+    }
+}
 
 plugins {
-    id("com.gradleup.shadow") version "8.3.6"
-    kotlin("jvm") version "2.1.10"
+    id("com.gradleup.shadow") version "9.3.0"
+    kotlin("jvm") version "2.3.0"
+    kotlin("plugin.serialization") version "2.3.0"
 }
+
+apply(plugin = "io.objectbox")
 
 group = "org.winlogon.minechat"
 
@@ -20,7 +30,7 @@ fun getLatestGitTag(): String? {
         } else {
             null
         }
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         null
     }
 }
@@ -52,7 +62,6 @@ repositories {
         url = uri("https://repo.papermc.io/repository/maven-public/")
         content {
             includeModule("io.papermc.paper", "paper-api")
-            includeModule("io.papermc", "paperlib")
             includeModule("net.md-5", "bungeecord-chat")
         }
     }
@@ -65,22 +74,32 @@ repositories {
     }
 
     maven {
-        url = uri("https://libraries.minecraft.net")
+        url = uri("https://maven.winlogon.org/releases")
     }
 
     mavenCentral()
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
-    compileOnly("net.kyori:adventure-text-serializer-plain:4.19.0")
-    compileOnly("com.mojang:brigadier:1.1.8")
-    compileOnly("com.github.ben-manes.caffeine:caffeine:3.2.0")
-    
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
-    testImplementation("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
-    testImplementation("org.jetbrains.kotlin:kotlin-test:2.1.10")
+    compileOnly(libs.caffeine)
+    compileOnly(libs.zstd.jni)
+
+    compileOnly(libs.objectbox.kotlin)
+    compileOnly(libs.paper.api)
+    compileOnly(libs.kotlin.reflect)
+    compileOnly(libs.asynccraftr)
+    implementation(libs.kaml)
+
+    implementation(libs.jackson.dataformat.cbor)
+    implementation(libs.jackson.module.kotlin)
+
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.serialization.cbor)
+
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.paper.api.test)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.kotlin.test)
 }
 
 tasks.test {
@@ -104,7 +123,6 @@ tasks.shadowJar {
     minimize()
 }
 
-// Disable jar and replace with shadowJar
 tasks.jar {
     enabled = false
 }
@@ -113,7 +131,6 @@ tasks.assemble {
     dependsOn(tasks.shadowJar)
 }
 
-// Utility tasks
 tasks.register("printProjectName") {
     doLast {
         println(projectName)
@@ -129,5 +146,11 @@ tasks.register("release") {
                 file("${layout.buildDirectory.get()}/libs/${rootProject.name}.jar")
             )
         }
+    }
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        freeCompilerArgs.add("-Xannotation-default-target=param-property")
     }
 }
