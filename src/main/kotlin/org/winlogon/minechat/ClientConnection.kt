@@ -18,6 +18,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.logging.Level
 import java.util.logging.Logger
 
 /**
@@ -82,7 +83,7 @@ class ClientConnection(
     @OptIn(ExperimentalSerializationApi::class)
     override fun run() {
         try {
-            logger.info("ClientConnection.run() started for ${socket.remoteSocketAddress}")
+            logger.fine("ClientConnection.run() started for ${socket.remoteSocketAddress}")
 
             // Main packet processing loop
             while (running && !disconnected.get()) {
@@ -96,7 +97,7 @@ class ClientConnection(
                 // Read the framing layer
                 val decompressedLen = reader.readInt()
                 val compressedLen = reader.readInt()
-                logger.info("Read frame header: decompressedLen=$decompressedLen, compressedLen=$compressedLen")
+                logger.fine("Read frame header: decompressedLen=$decompressedLen, compressedLen=$compressedLen")
 
                 if (decompressedLen <= 0 || compressedLen <= 0) {
                     logger.warning("Received non-positive frame size. Terminating connection.")
@@ -108,11 +109,11 @@ class ClientConnection(
 
                 val compressed = ByteArray(compressedLen)
                 reader.readFully(compressed)
-                logger.info("Read compressed data: ${compressed.size} bytes")
+                logger.fine("Read compressed data: ${compressed.size} bytes")
 
                 // Log compressed bytes hex for debugging
                 val compressedHex = compressed.take(32).joinToString("") { "%02X".format(it) }
-                logger.info("Compressed hex (first 32 bytes): $compressedHex")
+                logger.fine("Compressed hex (first 32 bytes): $compressedHex")
 
                 try {
                     logger.fine("Decompressing ${compressed.size} bytes to expected $decompressedLen bytes...")
@@ -120,7 +121,7 @@ class ClientConnection(
                     try {
                         decompressed = Zstd.decompress(compressed, decompressedLen)
                     } catch (t: Throwable) {
-                        logger.severe("Zstd.decompress EXCEPTION: ${t.javaClass.name}: ${t.message}")
+                        logger.log(Level.SEVERE, "Zstd.decompress EXCEPTION: ${t.javaClass.name}: ${t.message}", t)
                         t.printStackTrace()
                         break
                     }
@@ -131,14 +132,13 @@ class ClientConnection(
                         break
                     }
 
-                    // Debug: Log raw CBOR bytes for inspection
                     val hexPreview = decompressed.take(32).joinToString("") { "%02X".format(it) }
                     logger.fine("Decompressed CBOR: len=${decompressed.size}, hex=$hexPreview")
 
                     val mineChatPacket = try {
                         cbor.decodeFromByteArray(MineChatPacket, decompressed)
                     } catch (e: Exception) {
-                        logger.severe("CBOR deserialization failed: ${e.message}")
+                        logger.log(Level.SEVERE, "CBOR deserialization failed: ${e.message}", e)
                         e.printStackTrace()
                         break
                     }
@@ -151,27 +151,27 @@ class ClientConnection(
                     when (mineChatPacket.packetType) {
                         PacketTypes.LINK -> {
                             val payload = mineChatPacket.payload as LinkPayload
-                            logger.info("Received LINK message: $payload")
+                            logger.fine("Received LINK message: $payload")
                             handleAuth(payload)
                         }
                         PacketTypes.CAPABILITIES -> {
                             val payload = mineChatPacket.payload as CapabilitiesPayload
-                            logger.info("Received CAPABILITIES message: $payload")
+                            logger.fine("Received CAPABILITIES message: $payload")
                             handleCapabilities(payload)
                         }
                         PacketTypes.CHAT_MESSAGE -> {
                             val payload = mineChatPacket.payload as ChatMessagePayload
-                            logger.info("Received CHAT_MESSAGE message: $payload")
+                            logger.fine("Received CHAT_MESSAGE message: $payload")
                             handleChat(payload)
                         }
                         PacketTypes.PING -> {
                             val payload = mineChatPacket.payload as PingPayload
-                            logger.info("Received PING message: $payload")
+                            logger.fine("Received PING message: $payload")
                             handlePing(payload)
                         }
                         PacketTypes.PONG -> {
                             val payload = mineChatPacket.payload as PongPayload
-                            logger.info("Received PONG message: $payload")
+                            logger.fine("Received PONG message: $payload")
                             handlePong(payload)
                         }
                         else -> logger.warning("Unknown packet type: ${mineChatPacket.packetType}")
@@ -186,7 +186,7 @@ class ClientConnection(
             // This is expected due to keep-alive timeout checking, continue loop
         } catch (_: EOFException) {
             // Client disconnected normally - this is expected behavior
-            logger.info("Client disconnected normally")
+            logger.info("Client disconnected")
             return
         } catch (e: Exception) {
             if (running && !disconnected.get()) {
@@ -221,7 +221,7 @@ class ClientConnection(
             val mineChatPacket = createPacket(packetType, payload)
             sendPacket(mineChatPacket)
         } catch (e: Exception) {
-            logger.warning("Error sending AuthOkPayload: ${e.message}")
+            logger.log(Level.WARNING, "Error sending AuthOkPayload: ${e.message}", e)
         }
     }
 
@@ -230,7 +230,7 @@ class ClientConnection(
             val mineChatPacket = createPacket(packetType, payload)
             sendPacket(mineChatPacket)
         } catch (e: Exception) {
-            logger.warning("Error sending PingPayload: ${e.message}")
+            logger.log(Level.WARNING, "Error sending PingPayload: ${e.message}", e)
         }
     }
 
@@ -239,7 +239,7 @@ class ClientConnection(
             val mineChatPacket = createPacket(packetType, payload)
             sendPacket(mineChatPacket)
         } catch (e: Exception) {
-            logger.warning("Error sending PongPayload: ${e.message}")
+            logger.log(Level.WARNING, "Error sending PongPayload: ${e.message}", e)
         }
     }
 
@@ -248,7 +248,7 @@ class ClientConnection(
             val mineChatPacket = createPacket(packetType, payload)
             sendPacket(mineChatPacket)
         } catch (e: Exception) {
-            logger.warning("Error sending DisconnectPayload: ${e.message}")
+            logger.log(Level.WARNING, "Error sending DisconnectPayload: ${e.message}", e)
         }
     }
 
@@ -353,8 +353,10 @@ class ClientConnection(
         // Get or create client
         val existingClient = plugin.clientStorage.find(clientUuid, null)
         val client = if (existingClient != null) {
-            existingClient.minecraftUuid = link.minecraftUuid
-            existingClient.minecraftUsername = link.minecraftUsername
+            existingClient.apply {
+                minecraftUuid = link.minecraftUuid
+                minecraftUsername = link.minecraftUsername
+            }
             existingClient
         } else {
             Client(
@@ -406,7 +408,7 @@ class ClientConnection(
     }
 
     private fun handleChat(payload: ChatMessagePayload) {
-        val c = client ?: return
+        if (this.client == null) return
 
         // Process the chat message
         val format = payload.format
