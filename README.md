@@ -43,15 +43,15 @@ The plugin works by generating temporary codes that players can use to authentic
      ```
      <server>/plugins/MineChat/keystore.p12
      ```
-   - Edit the generated `config.yml` in the plugin folder, or create one with:
-     ```yaml
-     port: 25575
-     tls:
-       enabled: true
-       keystore: "keystore.p12"
-       keystore-password: "your-password"
-     ```
-   - **Note**: The server enforces TLS 1.3 for maximum security.
+    - Edit the generated `config.yml` in the plugin folder, or create one with:
+      ```yaml
+      port: 7632
+      tls:
+        enabled: true
+        keystore: "keystore.p12"
+        keystore-password: "your-password"
+      ```
+    - **Note**: The server enforces TLS 1.3 for maximum security.
 
 5. **Start Your Server**: Start or restart your Paper server to load the MineChat Server Plugin.
 
@@ -66,14 +66,15 @@ The plugin works by generating temporary codes that players can use to authentic
 2. **Link from the [client](https://github.com/walker84837/minechat-client)**:
    - Use the provided code in your MineChat CLI client to authenticate:
      ```bash
-     minechat-client --server <host:port> --link <code>
+     minechat-client <host> --port <port> --link <code>
      ```
+   - The default port is 7632 if not specified.
    - This links your MineChat client to your Minecraft account without needing to log in with your Minecraft credentials.
 
 ## How it works
 
 - **Initial phase**:
-  The plugin opens a server socket on port `25575` to listen for connections from MineChat clients.
+  The plugin opens a server socket on port `7632` (or configured port) to listen for connections from MineChat clients.
 
 - **Authentication**:
   - Clients use either a new link code or their stored client UUID to authenticate.

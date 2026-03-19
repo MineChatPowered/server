@@ -13,7 +13,7 @@ data class TlsConfig(
 
 @Serializable
 data class MineChatConfig(
-    val port: Int = 25575,
+    val port: Int = 7632,
     @SerialName("expiry-code-minutes")
     val expiryCodeMinutes: Int = 5,
     val tls: TlsConfig = TlsConfig()
