@@ -25,7 +25,7 @@ object PacketTypes {
     const val PING = 0x06
     const val PONG = 0x07
     const val MODERATION = 0x08
-    const val DISCONNECT = 0x80
+    const val SYSTEM_DISCONNECT = 0x09
 }
 
 object ModerationAction {
@@ -38,6 +38,13 @@ object ModerationAction {
 object ModerationScope {
     const val CLIENT = 0
     const val ACCOUNT = 1
+}
+
+object SystemDisconnectReason {
+    const val SHUTDOWN = 0
+    const val MAINTENANCE = 1
+    const val INTERNAL_ERROR = 2
+    const val OVERLOADED = 3
 }
 
 object ChatGradients {
@@ -94,8 +101,9 @@ data class ModerationPayload(
 ) : PacketPayload()
 
 @Serializable
-data class DisconnectPayload(
-    val reason: String
+data class SystemDisconnectPayload(
+    val reason_code: Int,
+    val message: String
 ) : PacketPayload()
 
 @Serializable
@@ -156,7 +164,7 @@ data class MineChatPacket(
             PacketTypes.PING -> PingPayload.serializer()
             PacketTypes.PONG -> PongPayload.serializer()
             PacketTypes.MODERATION -> ModerationPayload.serializer()
-            PacketTypes.DISCONNECT -> DisconnectPayload.serializer()
+            PacketTypes.SYSTEM_DISCONNECT -> SystemDisconnectPayload.serializer()
             else -> EmptyPayload.serializer()
         }
     }

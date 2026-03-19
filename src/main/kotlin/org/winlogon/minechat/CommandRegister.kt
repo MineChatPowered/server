@@ -67,7 +67,7 @@ class CommandRegister(private val services: PluginServices) : Listener {
                     services.broadcastToClients(PacketTypes.MODERATION, modPayload)
 
                     // Disconnect the client if online
-                    getClientConnection(playerName)?.disconnect(reason)
+                    getClientConnection(playerName)?.sendModerationAndDisconnect(ModerationAction.BAN, ModerationScope.ACCOUNT, reason, null)
 
                     ctx.source.sender.sendMessage(Component.text("Banned $playerName from MineChat.").color(NamedTextColor.GREEN))
                     Command.SINGLE_SUCCESS
@@ -107,7 +107,7 @@ class CommandRegister(private val services: PluginServices) : Listener {
                     )
                     services.broadcastToClients(PacketTypes.MODERATION, modPayload)
 
-                    clientConnection.disconnect(reason)
+                    clientConnection.sendModerationAndDisconnect(ModerationAction.KICK, ModerationScope.CLIENT, reason, null)
                     ctx.source.sender.sendRichMessage(
                         "<green>Kicked <player> from MineChat.</green>",
                         Placeholder.unparsed("player", playerName)

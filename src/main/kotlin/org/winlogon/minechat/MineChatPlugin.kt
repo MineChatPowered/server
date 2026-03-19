@@ -177,7 +177,8 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
         isServerRunning = false
         serverThread?.interrupt()
         serverSocket?.close()
-        connectedClients.forEach { it.disconnect("Server is shutting down.") }
+        // Send SYSTEM_DISCONNECT to all clients before shutting down
+        connectedClients.forEach { it.sendSystemDisconnect(SystemDisconnectReason.SHUTDOWN, "Server is shutting down.") }
         executorService.shutdownNow()
         try {
             executorService.awaitTermination(10, TimeUnit.SECONDS)

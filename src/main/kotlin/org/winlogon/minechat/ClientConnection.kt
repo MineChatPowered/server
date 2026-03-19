@@ -244,15 +244,6 @@ class ClientConnection(
         }
     }
 
-    private fun sendMessage(packetType: Int, payload: DisconnectPayload) {
-        try {
-            val mineChatPacket = createPacket(packetType, payload)
-            sendPacket(mineChatPacket)
-        } catch (e: Exception) {
-            logger.log(Level.WARNING, "Error sending DisconnectPayload: ${e.message}", e)
-        }
-    }
-
     private fun <T : PacketPayload> createPacket(packetType: Int, payload: T): MineChatPacket {
         return MineChatPacket(packetType, payload)
     }
@@ -324,7 +315,7 @@ class ClientConnection(
                 logger.info("Reconnected client: ${existingClient.minecraftUsername}")
                 return
             } else {
-                disconnect("Unknown client")
+                disconnect()
                 return
             }
         }
@@ -333,7 +324,7 @@ class ClientConnection(
         val link = plugin.linkCodeStorage.find(linkCode)
         if (link == null) {
             logger.warning("Invalid link code: $linkCode")
-            disconnect("Invalid link code")
+            disconnect()
             return
         }
 
@@ -341,7 +332,7 @@ class ClientConnection(
         if (System.currentTimeMillis() - link.expiresAt > 15 * 60 * 1000) {
             logger.warning("Expired link code: $linkCode")
             plugin.linkCodeStorage.remove(linkCode)
-            disconnect("Link code expired")
+            disconnect()
             return
         }
 
@@ -407,7 +398,7 @@ class ClientConnection(
             logger.info("Client ${it.minecraftUsername} authenticated with capabilities: supportsComponents=${it.supportsComponents}")
         } ?: run {
             logger.warning("Received CAPABILITIES packet but client is null. This should not happen.")
-            disconnect("Internal error: client not found.")
+            disconnect()
         }
     }
 
@@ -466,15 +457,59 @@ class ClientConnection(
     }
 
     private fun sendBannedMessage(ban: Ban) {
-        val reason = ban.reason ?: "You are banned"
-        sendMessage(PacketTypes.DISCONNECT, DisconnectPayload(reason))
+        // Send MODERATION packet with ban action, then close socket per spec
+        val moderationPayload = ModerationPayload(
+            action = ModerationAction.BAN,
+            scope = ModerationScope.ACCOUNT,
+            reason = ban.reason,
+            duration_seconds = null
+        )
+        try {
+            val packet = MineChatPacket(PacketTypes.MODERATION, moderationPayload)
+            sendPacket(packet)
+        } catch (e: Exception) {
+            logger.warning("Failed to send MODERATION packet: ${e.message}")
+        }
         close()
     }
 
     fun getClient(): Client? = client
 
-    fun disconnect(reason: String) {
-        sendMessage(PacketTypes.DISCONNECT, DisconnectPayload(reason))
+    /**
+     * Sends a MODERATION packet to the client, then closes the connection.
+     * Used for kick/ban actions per the protocol spec.
+     */
+    fun sendModerationAndDisconnect(action: Int, scope: Int, reason: String?, durationSeconds: Int?) {
+        val payload = ModerationPayload(action, scope, reason, durationSeconds)
+        try {
+            val packet = MineChatPacket(PacketTypes.MODERATION, payload)
+            sendPacket(packet)
+        } catch (e: Exception) {
+            logger.warning("Failed to send MODERATION packet: ${e.message}")
+        }
+        close()
+    }
+
+    /**
+     * Sends a SYSTEM_DISCONNECT packet, then closes the connection.
+     * Used for server-initiated shutdown/maintenance.
+     */
+    fun sendSystemDisconnect(reasonCode: Int, message: String) {
+        val payload = SystemDisconnectPayload(reasonCode, message)
+        try {
+            val packet = MineChatPacket(PacketTypes.SYSTEM_DISCONNECT, payload)
+            sendPacket(packet)
+        } catch (e: Exception) {
+            logger.warning("Failed to send SYSTEM_DISCONNECT packet: ${e.message}")
+        }
+        close()
+    }
+
+    /**
+     * Closes the connection without sending any packet (EOF).
+     * Used for client-initiated disconnections.
+     */
+    fun disconnect() {
         close()
     }
 
