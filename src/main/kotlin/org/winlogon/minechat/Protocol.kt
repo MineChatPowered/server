@@ -59,18 +59,18 @@ sealed class PacketPayload
 
 @Serializable
 data class LinkPayload(
-    val linking_code: String,
-    val client_uuid: String
+    @CborLabel(0) val linking_code: String,
+    @CborLabel(1) val client_uuid: String
 ) : PacketPayload()
 
 @Serializable
 data class LinkOkPayload(
-    val minecraft_uuid: String
+    @CborLabel(0) val minecraft_uuid: String
 ) : PacketPayload()
 
 @Serializable
 data class CapabilitiesPayload(
-    val supports_components: Boolean
+    @CborLabel(0) val supports_components: Boolean
 ) : PacketPayload()
 
 @Serializable
@@ -78,32 +78,32 @@ class AuthOkPayload : PacketPayload()
 
 @Serializable
 data class ChatMessagePayload(
-    val format: String,
-    val content: String
+    @CborLabel(0) val format: String,
+    @CborLabel(1) val content: String
 ) : PacketPayload()
 
 @Serializable
 data class PingPayload(
-    val timestamp_ms: Long
+    @CborLabel(0) val timestamp_ms: Long
 ) : PacketPayload()
 
 @Serializable
 data class PongPayload(
-    val timestamp_ms: Long
+    @CborLabel(0) val timestamp_ms: Long
 ) : PacketPayload()
 
 @Serializable
 data class ModerationPayload(
-    val action: Int,
-    val scope: Int,
-    val reason: String? = null,
-    val duration_seconds: Int? = null
+    @CborLabel(0) val action: Int,
+    @CborLabel(1) val scope: Int,
+    @CborLabel(2) val reason: String? = null,
+    @CborLabel(3) val duration_seconds: Int? = null
 ) : PacketPayload()
 
 @Serializable
 data class SystemDisconnectPayload(
-    val reason_code: Int,
-    val message: String
+    @CborLabel(0) val reason_code: Int,
+    @CborLabel(1) val message: String
 ) : PacketPayload()
 
 @Serializable
@@ -174,4 +174,5 @@ fun createCbor(): Cbor = Cbor {
     preferCborLabelsOverNames = true
     ignoreUnknownKeys = true
     encodeDefaults = false
+    useDefiniteLengthEncoding = true
 }
