@@ -1,29 +1,24 @@
 [versions]
-kotlinx-serialization-json = "1.10.0"
 kotlinx-serialization-cbor = "1.10.0"
 kaml = "0.102.0"
 caffeine = "3.2.0"
 zstd-jni = "1.5.6-1"
-objectbox = "3.8.0"
 paper = "1.21.6-R0.1-SNAPSHOT"
 kotlin = "2.1.10"
 asynccraftr = "0.2.0"
-jackson = "2.17.1"
 junit = "1.11.4"
 lamp = "4.0.0-rc.16"
 bouncycastle = "1.78.1"
+exposed = "1.1.1"
+sqlite-jdbc = "3.51.2.0"
 
 [libraries]
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
 zstd-jni = { module = "com.github.luben:zstd-jni", version.ref = "zstd-jni" }
-objectbox-kotlin = { module = "io.objectbox:objectbox-kotlin", version.ref = "objectbox" }
 paper-api = { module = "io.papermc.paper:paper-api", version.ref = "paper" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 asynccraftr = { module = "org.winlogon:asynccraftr", version.ref = "asynccraftr" }
 kaml = { module = "com.charleskorn.kaml:kaml", version.ref = "kaml" }
-jackson-dataformat-cbor = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-cbor", version.ref = "jackson" }
-jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
-kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
 kotlinx-serialization-cbor = { module = "org.jetbrains.kotlinx:kotlinx-serialization-cbor", version.ref = "kotlinx-serialization-cbor" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
 paper-api-test = { module = "io.papermc.paper:paper-api", version.ref = "paper" }
@@ -33,3 +28,6 @@ lamp-common = { module = "io.github.revxrsal:lamp.common", version.ref = "lamp" 
 lamp-bukkit = { module = "io.github.revxrsal:lamp.bukkit", version.ref = "lamp" }
 bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 bouncycastle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
+exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
+exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }

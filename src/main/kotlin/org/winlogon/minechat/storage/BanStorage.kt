@@ -1,40 +1,73 @@
 package org.winlogon.minechat.storage
 
-import io.objectbox.Box
-import io.objectbox.BoxStore
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 
-import org.winlogon.minechat.entities.Ban
-import org.winlogon.minechat.entities.Ban_
+import org.winlogon.minechat.DatabaseManager
+import org.winlogon.minechat.entities.BanTable
 
-class BanStorage(boxStore: BoxStore) {
-    private val banBox: Box<Ban> = boxStore.boxFor(Ban::class.java)
+import java.util.UUID
 
-    fun add(ban: Ban) {
-        banBox.put(ban)
+class BanStorage(
+    private val databaseManager: DatabaseManager
+) {
+    fun add(clientUuid: String?, minecraftUuid: UUID?, minecraftUsername: String?, reason: String?) {
+        databaseManager.asyncQuery {
+            BanTable.insert {
+                it[BanTable.clientUuid] = clientUuid
+                it[BanTable.minecraftUuid] = minecraftUuid?.toString()
+                it[BanTable.minecraftUsername] = minecraftUsername
+                it[BanTable.reason] = reason
+                it[BanTable.timestamp] = System.currentTimeMillis()
+            }
+        }
     }
 
     fun remove(clientUuid: String?, minecraftUsername: String?) {
         if (clientUuid != null) {
-            banBox.query(Ban_.clientUuid.equal(clientUuid)).build().remove()
+            databaseManager.asyncQuery {
+                BanTable.deleteWhere { BanTable.clientUuid eq clientUuid }
+            }
         }
         if (minecraftUsername != null) {
-            banBox.query(Ban_.minecraftUsername.equal(minecraftUsername)).build().remove()
+            databaseManager.asyncQuery {
+                BanTable.deleteWhere { BanTable.minecraftUsername eq minecraftUsername }
+            }
         }
     }
 
-    fun getBan(clientUuid: String?, minecraftUsername: String?): Ban? {
-        if (clientUuid != null) {
-            val ban = banBox.query(Ban_.clientUuid.equal(clientUuid)).build().findFirst()
-            if (ban != null) {
-                return ban
-            }
+    fun getBan(clientUuid: String?, minecraftUsername: String?): BanInfo? {
+        val condition = when {
+            clientUuid != null -> BanTable.clientUuid eq clientUuid
+            minecraftUsername != null -> BanTable.minecraftUsername eq minecraftUsername
+            else -> return null
         }
-        if (minecraftUsername != null) {
-            val ban = banBox.query(Ban_.minecraftUsername.equal(minecraftUsername)).build().findFirst()
-            if (ban != null) {
-                return ban
-            }
-        }
-        return null
+
+        val result = databaseManager.syncQuery {
+            BanTable.selectAll()
+                .where { condition }
+                .firstOrNull()
+        }.get()
+
+        return result?.toBanInfo()
     }
+
+    private fun ResultRow.toBanInfo() = BanInfo(
+        clientUuid = this[BanTable.clientUuid],
+        minecraftUuid = this[BanTable.minecraftUuid]?.let(UUID::fromString),
+        minecraftUsername = this[BanTable.minecraftUsername],
+        reason = this[BanTable.reason],
+        timestamp = this[BanTable.timestamp]
+    )
+
+    data class BanInfo(
+        val clientUuid: String?,
+        val minecraftUuid: UUID?,
+        val minecraftUsername: String?,
+        val reason: String?,
+        val timestamp: Long
+    )
 }

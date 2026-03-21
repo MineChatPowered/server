@@ -3,54 +3,90 @@ package org.winlogon.minechat.storage
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 
-import io.objectbox.Box
-import io.objectbox.BoxStore
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 
-import org.winlogon.minechat.entities.Client
-import org.winlogon.minechat.entities.Client_
+import org.winlogon.minechat.DatabaseManager
+import org.winlogon.minechat.entities.ClientTable
 
-class ClientStorage(boxStore: BoxStore) {
-    private val clientBox: Box<Client> = boxStore.boxFor(Client::class.java)
-    private val clientCache: Cache<String, Client> = Caffeine.newBuilder()
+import java.util.UUID
+
+class ClientStorage(
+    private val databaseManager: DatabaseManager
+) {
+    private val clientCache: Cache<String, CachedClient> = Caffeine.newBuilder()
         .maximumSize(1000)
         .build()
 
-    /**
-     * Finds a client by either client UUID or Minecraft username.
-     *
-     * @param clientUuid The client UUID to search for (optional)
-     * @param minecraftUsername The Minecraft username to search for (optional)
-     * @return The matching Client, or null if not found. At least one parameter must be provided.
-     */
-    fun find(clientUuid: String?, minecraftUsername: String?): Client? {
+    fun find(clientUuid: String?, minecraftUsername: String?): CachedClient? {
         if (clientUuid != null) {
             return clientCache.getIfPresent(clientUuid) ?: run {
-                val client = clientBox.query(Client_.clientUuid.equal(clientUuid)).build().findFirst()
-                client?.let { clientCache.put(clientUuid, it) }
-                client
+                val result = databaseManager.syncQuery {
+                    ClientTable.selectAll().where { ClientTable.clientUuid eq clientUuid }.firstOrNull()
+                }.get()
+
+                result?.let {
+                    val cached = CachedClient(
+                        it[ClientTable.clientUuid],
+                        it[ClientTable.minecraftUuid]?.let { uuid -> UUID.fromString(uuid) },
+                        it[ClientTable.minecraftUsername],
+                        it[ClientTable.supportsComponents]
+                    )
+                    clientCache.put(clientUuid, cached)
+                    cached
+                }
             }
         }
         if (minecraftUsername != null) {
             return clientCache.asMap().values.find { it.minecraftUsername == minecraftUsername } ?: run {
-                val client = clientBox.query(Client_.minecraftUsername.equal(minecraftUsername)).build().findFirst()
-                client?.let { clientCache.put(it.clientUuid, it) }
-                client
+                val result = databaseManager.syncQuery {
+                    ClientTable.selectAll().where { ClientTable.minecraftUsername eq minecraftUsername }.firstOrNull()
+                }.get()
+
+                result?.let {
+                    val cached = CachedClient(
+                        it[ClientTable.clientUuid],
+                        it[ClientTable.minecraftUuid]?.let { uuid -> UUID.fromString(uuid) },
+                        it[ClientTable.minecraftUsername],
+                        it[ClientTable.supportsComponents]
+                    )
+                    clientCache.put(cached.clientUuid, cached)
+                    cached
+                }
             }
         }
         return null
     }
 
-    fun add(client: Client) {
-        // Check if a client with the same minecraft username already exists
-        val existing = find(null, client.minecraftUsername)
+    fun add(clientUuid: String, minecraftUuid: UUID?, minecraftUsername: String, supportsComponents: Boolean) {
+        val existing = find(null, minecraftUsername)
         if (existing != null) {
-            // Update existing client's uuid
-            existing.clientUuid = client.clientUuid
-            clientBox.put(existing)
-            clientCache.put(existing.clientUuid, existing)
+            databaseManager.asyncQuery {
+                ClientTable.update({ ClientTable.minecraftUsername eq minecraftUsername }) {
+                    it[ClientTable.clientUuid] = clientUuid
+                    it[ClientTable.supportsComponents] = supportsComponents
+                }
+            }
+            clientCache.put(clientUuid, CachedClient(clientUuid, minecraftUuid, minecraftUsername, supportsComponents))
         } else {
-            clientBox.put(client)
-            clientCache.put(client.clientUuid, client)
+            databaseManager.asyncQuery {
+                ClientTable.insert {
+                    it[ClientTable.clientUuid] = clientUuid
+                    it[ClientTable.minecraftUuid] = minecraftUuid?.toString()
+                    it[ClientTable.minecraftUsername] = minecraftUsername
+                    it[ClientTable.supportsComponents] = supportsComponents
+                }
+            }
+            clientCache.put(clientUuid, CachedClient(clientUuid, minecraftUuid, minecraftUsername, supportsComponents))
         }
     }
+
+    data class CachedClient(
+        val clientUuid: String,
+        val minecraftUuid: UUID?,
+        val minecraftUsername: String,
+        val supportsComponents: Boolean
+    )
 }

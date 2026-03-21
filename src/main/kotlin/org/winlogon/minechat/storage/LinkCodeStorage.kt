@@ -3,55 +3,89 @@ package org.winlogon.minechat.storage
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 
-import io.objectbox.Box
-import io.objectbox.BoxStore
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 
-import org.winlogon.minechat.entities.LinkCode
-import org.winlogon.minechat.entities.LinkCode_
+import org.winlogon.minechat.DatabaseManager
+import org.winlogon.minechat.entities.LinkCodeTable
+import org.winlogon.asynccraftr.AsyncCraftr
+import org.winlogon.asynccraftr.task.Task
 
-import java.io.Closeable
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
+import org.bukkit.plugin.java.JavaPlugin
+import java.util.UUID
+import java.time.Duration
 
-class LinkCodeStorage(boxStore: BoxStore) : Closeable {
-    private val linkCodeBox: Box<LinkCode> = boxStore.boxFor(LinkCode::class.java)
-    private val scheduler = Executors.newSingleThreadScheduledExecutor()
-    private val linkCodeCache: Cache<String, LinkCode> = Caffeine.newBuilder()
-        .expireAfterWrite(5, TimeUnit.MINUTES)
+class LinkCodeStorage(
+    plugin: JavaPlugin,
+    private val databaseManager: DatabaseManager
+) : AutoCloseable {
+    private var cleanupTask: Task? = null
+    private val linkCodeCache: Cache<String, CachedLinkCode> = Caffeine.newBuilder()
+        .expireAfterWrite(Duration.ofMinutes(5))
         .build()
 
     init {
-        // Schedule cleanup of expired link codes every minute
-        scheduler.scheduleAtFixedRate({
-            cleanupExpired()
-        }, 0, 1, TimeUnit.MINUTES)
+        cleanupTask = AsyncCraftr.runAsyncTaskTimer(
+            plugin,
+            { cleanupExpired() },
+            Duration.ZERO,
+            Duration.ofMinutes(1)
+        )
     }
 
-    fun add(linkCode: LinkCode) {
-        linkCodeBox.put(linkCode)
-        linkCodeCache.put(linkCode.code, linkCode)
+    fun add(code: String, minecraftUuid: UUID, minecraftUsername: String, expiresAt: Long) {
+        databaseManager.asyncQuery {
+            LinkCodeTable.insert {
+                it[LinkCodeTable.code] = code
+                it[LinkCodeTable.minecraftUuid] = minecraftUuid.toString()
+                it[LinkCodeTable.minecraftUsername] = minecraftUsername
+                it[LinkCodeTable.expiresAt] = expiresAt
+            }
+        }
+        linkCodeCache.put(code, CachedLinkCode(minecraftUuid, minecraftUsername, expiresAt))
     }
 
-    fun find(code: String): LinkCode? {
+    fun find(code: String): CachedLinkCode? {
         return linkCodeCache.getIfPresent(code) ?: run {
-            val linkCode = linkCodeBox.query(LinkCode_.code.equal(code)).build().findFirst()
-            linkCode?.let { linkCodeCache.put(code, it) }
-            linkCode
+            val result = databaseManager.syncQuery {
+                LinkCodeTable.selectAll().where { LinkCodeTable.code eq code }.firstOrNull()
+            }.get() ?: return null
+
+            val cached = CachedLinkCode(
+                UUID.fromString(result[LinkCodeTable.minecraftUuid]),
+                result[LinkCodeTable.minecraftUsername],
+                result[LinkCodeTable.expiresAt]
+            )
+            linkCodeCache.put(code, cached)
+            cached
         }
     }
 
     fun remove(code: String) {
         linkCodeCache.invalidate(code)
-        linkCodeBox.query(LinkCode_.code.equal(code)).build().remove()
+        databaseManager.asyncQuery {
+            LinkCodeTable.deleteWhere { LinkCodeTable.code eq code }
+        }
     }
 
-    fun cleanupExpired() {
+    private fun cleanupExpired() {
         val now = System.currentTimeMillis()
-        linkCodeBox.query(LinkCode_.expiresAt.less(now)).build().remove()
+        databaseManager.asyncQuery {
+            LinkCodeTable.deleteWhere { LinkCodeTable.expiresAt less now }
+        }
         linkCodeCache.asMap().values.removeIf { it.expiresAt < now }
     }
 
     override fun close() {
-        scheduler.shutdown()
+        cleanupTask?.cancel()
     }
+
+    data class CachedLinkCode(
+        val minecraftUuid: UUID,
+        val minecraftUsername: String,
+        val expiresAt: Long
+    )
 }

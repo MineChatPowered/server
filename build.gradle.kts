@@ -1,20 +1,8 @@
-buildscript {
-    repositories {
-        mavenCentral()
-        maven { url = uri("https://download.objectbox.io/maven") }
-    }
-    dependencies {
-        classpath("io.objectbox:objectbox-gradle-plugin:3.8.0")
-    }
-}
-
 plugins {
     id("com.gradleup.shadow") version "9.3.0"
     kotlin("jvm") version "2.3.0"
     kotlin("plugin.serialization") version "2.3.0"
 }
-
-apply(plugin = "io.objectbox")
 
 group = "org.winlogon.minechat"
 
@@ -54,7 +42,7 @@ val version: String = when {
 val pluginName = rootProject.name
 val pluginVersion = version
 val pluginPackage = project.group.toString()
-val projectName = rootProject.name
+val projectName = pluginName
 
 repositories {
     maven {
@@ -84,7 +72,6 @@ dependencies {
     compileOnly(libs.caffeine)
     compileOnly(libs.zstd.jni)
 
-    compileOnly(libs.objectbox.kotlin)
     compileOnly(libs.paper.api)
     compileOnly(libs.kotlin.reflect)
     compileOnly(libs.asynccraftr)
@@ -92,12 +79,12 @@ dependencies {
     compileOnly(libs.lamp.bukkit)
     compileOnly(libs.bouncycastle.bcprov)
     compileOnly(libs.bouncycastle.bcpkix)
+
     implementation(libs.kaml)
+    implementation(libs.exposed.core)
+    implementation(libs.exposed.jdbc)
+    compileOnly(libs.sqlite.jdbc)
 
-    implementation(libs.jackson.dataformat.cbor)
-    implementation(libs.jackson.module.kotlin)
-
-    implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.serialization.cbor)
 
     testRuntimeOnly(libs.junit.platform.launcher)
@@ -123,8 +110,8 @@ tasks.processResources {
 
 tasks.shadowJar {
     archiveClassifier.set("")
-    relocate("io.papermc.lib", "shadow.io.papermc.paperlib")
-    minimize()
+    // TODO: add something like this for all impl() deps:
+    // relocate("io.papermc.lib", "org.winlogon.minechat.shadow.paperlib")
 }
 
 tasks.jar {

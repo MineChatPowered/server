@@ -9,8 +9,8 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 
 import org.bukkit.Bukkit
-import org.winlogon.minechat.entities.Ban
-import org.winlogon.minechat.entities.Client
+import org.winlogon.minechat.storage.ClientStorage.CachedClient
+import org.winlogon.minechat.storage.BanStorage.BanInfo
 
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -50,7 +50,7 @@ class ClientConnection(
     val reader = DataInputStream(socket.inputStream)
     val writer = DataOutputStream(socket.outputStream)
 
-    private var client: Client? = null
+    private var client: CachedClient? = null
     private val running = AtomicBoolean(true)
 
 
@@ -328,7 +328,7 @@ class ClientConnection(
         }
 
         // Check if link code is expired (15 minutes)
-        if (System.currentTimeMillis() - link.expiresAt > 15 * 60 * 1000) {
+        if (System.currentTimeMillis() > link.expiresAt) {
             logger.warning("Expired link code: $linkCode")
             plugin.linkCodeStorage.remove(linkCode)
             disconnect()
@@ -344,23 +344,25 @@ class ClientConnection(
         // Delete the used link code
         plugin.linkCodeStorage.remove(linkCode)
 
-        // Get or create client
+        // Create or update client
         val existingClient = plugin.clientStorage.find(clientUuid, null)
-        val client = if (existingClient != null) {
-            existingClient.apply {
-                minecraftUuid = link.minecraftUuid
-                minecraftUsername = link.minecraftUsername
-            }
-            existingClient
-        } else {
-            Client(
+        val newClient = if (existingClient != null) {
+            CachedClient(
                 clientUuid = clientUuid,
                 minecraftUuid = link.minecraftUuid,
-                minecraftUsername = link.minecraftUsername
+                minecraftUsername = link.minecraftUsername,
+                supportsComponents = existingClient.supportsComponents
+            )
+        } else {
+            CachedClient(
+                clientUuid = clientUuid,
+                minecraftUuid = link.minecraftUuid,
+                minecraftUsername = link.minecraftUsername,
+                supportsComponents = false
             )
         }
 
-        this.client = client
+        this.client = newClient
 
         // Per spec: send LINK_OK, wait for CAPABILITIES, then send AUTH_OK
         sendMessage(PacketTypes.LINK_OK, LinkOkPayload(minecraft_uuid = link.minecraftUuid.toString()))
@@ -381,20 +383,24 @@ class ClientConnection(
             return
         }
 
-        client?.let {
-            it.supportsComponents = payload.supports_components
-            plugin.clientStorage.add(it)
+        client?.let { client ->
+            plugin.clientStorage.add(
+                client.clientUuid,
+                client.minecraftUuid,
+                client.minecraftUsername,
+                payload.supports_components
+            )
 
             sendMessage(PacketTypes.AUTH_OK, AuthOkPayload())
             capabilitiesReceived = true
 
-            if (it.supportsComponents) {
-                broadcastMinecraft(ChatGradients.JOIN, "${it.minecraftUsername} has joined the chat.")
+            if (client.supportsComponents) {
+                broadcastMinecraft(ChatGradients.JOIN, "${client.minecraftUsername} has joined the chat.")
             } else {
-                broadcastMinecraft(ChatGradients.AUTH, "${it.minecraftUsername} has successfully authenticated.")
+                broadcastMinecraft(ChatGradients.AUTH, "${client.minecraftUsername} has successfully authenticated.")
             }
 
-            logger.info("Client ${it.minecraftUsername} authenticated with capabilities: supportsComponents=${it.supportsComponents}")
+            logger.info("Client ${client.minecraftUsername} authenticated with capabilities: supportsComponents=${client.supportsComponents}")
         } ?: run {
             logger.warning("Received CAPABILITIES packet but client is null. This should not happen.")
             disconnect()
@@ -455,7 +461,7 @@ class ClientConnection(
         Bukkit.getServer().sendMessage(component)
     }
 
-    private fun sendBannedMessage(ban: Ban) {
+    private fun sendBannedMessage(ban: BanInfo) {
         // Send MODERATION packet with ban action, then close socket per spec
         val moderationPayload = ModerationPayload(
             action = ModerationAction.BAN,
@@ -472,7 +478,7 @@ class ClientConnection(
         close()
     }
 
-    fun getClient(): Client? = client
+    fun getClient(): CachedClient? = client
 
     /**
      * Sends a MODERATION packet to the client, then closes the connection.

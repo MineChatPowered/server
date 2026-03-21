@@ -7,9 +7,6 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import org.winlogon.minechat.ChatGradients
 import org.winlogon.minechat.ChatMessagePayload
 import org.winlogon.minechat.ClientConnection
-import org.winlogon.minechat.entities.Ban
-import org.winlogon.minechat.entities.LinkCode
-import org.winlogon.minechat.entities.Mute
 import org.winlogon.minechat.ModerationAction
 import org.winlogon.minechat.ModerationScope
 import org.winlogon.minechat.PacketTypes
@@ -45,11 +42,12 @@ class MinechatCommands(private val services: PluginServices) {
             return
         }
 
-        val ban = Ban(
+        services.banStorage.add(
+            clientUuid = client.clientUuid,
+            minecraftUuid = client.minecraftUuid,
             minecraftUsername = player,
             reason = reason
         )
-        services.banStorage.add(ban)
 
         getClientConnection(player)?.sendModerationAndDisconnect(
             ModerationAction.BAN,
@@ -78,14 +76,11 @@ class MinechatCommands(private val services: PluginServices) {
         @Default("5") durationMinutes: Int,
         @Default("Muted by an operator.") @Named("reason") reason: String?
     ) {
-        val expiresAt = System.currentTimeMillis() + (durationMinutes.toLong() * 60 * 1000)
-
-        val mute = Mute(
+        services.muteStorage.add(
             minecraftUsername = player,
             reason = reason,
-            expiresAt = expiresAt
+            expiresAt = System.currentTimeMillis() + (durationMinutes.toLong() * 60 * 1000)
         )
-        services.muteStorage.add(mute)
 
         getClientConnection(player)?.sendModeration(
             ModerationAction.MUTE,
@@ -151,17 +146,17 @@ class MinechatCommands(private val services: PluginServices) {
 
     @Subcommand("link")
     @Description("Generate a link code for your MineChat client")
+    @CommandPermission("minechat.link")
     fun link(actor: BukkitCommandActor) {
         val player = actor.asPlayer()!!
 
-        val code = services.generateRandomLinkCode()
-        val link = LinkCode(
+        val code = generateRandomLinkCode()
+        services.linkCodeStorage.add(
             code = code,
             minecraftUuid = player.uniqueId,
             minecraftUsername = player.name,
             expiresAt = System.currentTimeMillis() + (services.mineChatConfig.expiryCodeMinutes * 60_000L)
         )
-        services.linkCodeStorage.add(link)
 
         val codeComponent = Component.text(code, NamedTextColor.DARK_AQUA)
         val timeComponent = Component.text("${services.mineChatConfig.expiryCodeMinutes} minutes", NamedTextColor.DARK_GREEN)
@@ -190,6 +185,13 @@ class MinechatCommands(private val services: PluginServices) {
     }
 
     fun getClientConnection(username: String): ClientConnection? {
-        return services.connectedClients.find { it.getClient()?.minecraftUsername == username }
+        return services.connectedClients.find {
+            it.getClient()?.minecraftUsername?.equals(username, ignoreCase = true) == true
+        }
+    }
+
+    fun generateRandomLinkCode(): String {
+        val chars = ('A'..'Z') + ('0'..'9')
+        return (1..6).map { chars.random() }.joinToString("")
     }
 }

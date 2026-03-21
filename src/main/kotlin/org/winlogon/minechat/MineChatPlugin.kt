@@ -6,9 +6,7 @@ package org.winlogon.minechat
 import com.charleskorn.kaml.Yaml
 import com.github.luben.zstd.Zstd
 
-import io.objectbox.BoxStore
 import io.papermc.paper.event.player.AsyncChatEvent
-import kotlinx.serialization.ExperimentalSerializationApi
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -19,7 +17,6 @@ import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.permissions.Permission
 import org.bukkit.plugin.java.JavaPlugin
-import org.winlogon.minechat.entities.MyObjectBox
 import org.winlogon.minechat.storage.BanStorage
 import org.winlogon.minechat.storage.ClientStorage
 import org.winlogon.minechat.storage.LinkCodeStorage
@@ -34,11 +31,12 @@ import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLServerSocket
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.ExperimentalSerializationApi
 
 class MineChatPlugin : JavaPlugin(), PluginServices {
     private var serverSocket: ServerSocket? = null
     private var isFolia: Boolean = false
-    private lateinit var boxStore: BoxStore
+    private lateinit var databaseManager: DatabaseManager
     @Volatile private var isServerRunning: Boolean = false
     private var serverThread: Thread? = null
     private val executorService = Executors.newVirtualThreadPerTaskExecutor()
@@ -71,11 +69,6 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
         mineChatConfig = loadConfig()
     }
 
-    override fun generateRandomLinkCode(): String {
-        val chars = ('A'..'Z') + ('0'..'9')
-        return (1..6).map { chars.random() }.joinToString("")
-    }
-
     override fun onLoad() {
         isFolia = try {
             Class.forName("io.papermc.paper.threadedregions.RegionizedServer")
@@ -97,26 +90,29 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
             "mute" to Permission("minechat.mute", "Mutes a player from the MineChat server."),
             "warn" to Permission("minechat.warn", "Warns a player in the MineChat server."),
             "kick" to Permission("minechat.kick", "Kicks a player from the MineChat server."),
+            "link" to Permission("minechat.link", "Generate a link code for MineChat client."),
         )
         server.pluginManager.addPermissions(permissions.values.toList())
     }
 
     override fun onEnable() {
-        boxStore = MyObjectBox.builder().directory(dataFolder).build()
-        linkCodeStorage = LinkCodeStorage(boxStore)
-        clientStorage = ClientStorage(boxStore)
-        banStorage = BanStorage(boxStore)
-        muteStorage = MuteStorage(boxStore)
+        // Initialize with default config first to prevent UninitializedPropertyAccessException
+        // if reloadConfigAndDependencies() fails or throws an exception
+        mineChatConfig = MineChatConfig()
+
+        databaseManager = DatabaseManager(this)
+        databaseManager.createTables()
+
+        linkCodeStorage = LinkCodeStorage(this, databaseManager)
+        clientStorage = ClientStorage(databaseManager)
+        banStorage = BanStorage(databaseManager)
+        muteStorage = MuteStorage(databaseManager)
 
         muteStorage.cleanExpired()
 
-        CommandRegister(this).registerCommands()
         val tls = mineChatConfig.tls
 
-        if (!tls.enabled) {
-            logger.severe("MineChat server cannot start: TLS is disabled in config.yml, but it is mandatory.")
-            return
-        }
+        CommandRegister(this).registerCommands()
 
         val keystoreFile = File(dataFolder, tls.keystore)
         val keystorePassword = tls.keystorePassword.toCharArray()
@@ -230,14 +226,18 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
         serverThread?.interrupt()
         serverSocket?.close()
         connectedClients.forEach { it.sendSystemDisconnect(SystemDisconnectReason.SHUTDOWN, "Server is shutting down.") }
-        linkCodeStorage.close()
+        //if (::linkCodeStorage.isInitialized) {
+            linkCodeStorage.close()
+        //}
         executorService.shutdownNow()
         try {
             executorService.awaitTermination(10, TimeUnit.SECONDS)
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
-        boxStore.close()
+        //if (::databaseManager.isInitialized) {
+            databaseManager.close()
+        //}
         try {
             serverThread?.join()
         } catch (_: InterruptedException) {

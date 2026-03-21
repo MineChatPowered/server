@@ -31,7 +31,6 @@ The plugin works by generating temporary codes that players can use to authentic
      ```yaml
      port: 7632
      tls:
-       enabled: true
        keystore: "keystore.p12"
        keystore-password: "change-me"
      ```
