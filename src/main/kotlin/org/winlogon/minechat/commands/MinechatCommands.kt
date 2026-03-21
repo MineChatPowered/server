@@ -2,15 +2,18 @@ package org.winlogon.minechat.commands
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 
+import org.winlogon.minechat.ChatGradients
+import org.winlogon.minechat.ChatMessagePayload
 import org.winlogon.minechat.ClientConnection
+import org.winlogon.minechat.entities.Ban
+import org.winlogon.minechat.entities.LinkCode
+import org.winlogon.minechat.entities.Mute
 import org.winlogon.minechat.ModerationAction
-import org.winlogon.minechat.ModerationPayload
 import org.winlogon.minechat.ModerationScope
 import org.winlogon.minechat.PacketTypes
 import org.winlogon.minechat.PluginServices
-import org.winlogon.minechat.entities.Ban
-import org.winlogon.minechat.entities.Mute
 
 import revxrsal.commands.annotation.Command
 import revxrsal.commands.annotation.Default
@@ -26,6 +29,7 @@ import revxrsal.commands.bukkit.annotation.CommandPermission
 @Command("minechat")
 @Description("MineChat server moderation commands")
 class MinechatCommands(private val services: PluginServices) {
+    val miniMessage = services.miniMessage
 
     @Subcommand("ban")
     @Description("Ban a player from MineChat")
@@ -46,13 +50,6 @@ class MinechatCommands(private val services: PluginServices) {
             reason = reason
         )
         services.banStorage.add(ban)
-
-        val modPayload = ModerationPayload(
-            action = ModerationAction.BAN,
-            scope = ModerationScope.ACCOUNT,
-            reason = reason
-        )
-        services.broadcastToClients(PacketTypes.MODERATION, modPayload)
 
         getClientConnection(player)?.sendModerationAndDisconnect(
             ModerationAction.BAN,
@@ -90,13 +87,12 @@ class MinechatCommands(private val services: PluginServices) {
         )
         services.muteStorage.add(mute)
 
-        val modPayload = ModerationPayload(
-            action = ModerationAction.MUTE,
-            scope = ModerationScope.CLIENT,
-            reason = reason,
-            duration_seconds = durationMinutes * 60
+        getClientConnection(player)?.sendModeration(
+            ModerationAction.MUTE,
+            ModerationScope.CLIENT,
+            reason,
+            durationMinutes * 60
         )
-        services.broadcastToClients(PacketTypes.MODERATION, modPayload)
 
         actor.reply {
             Component.text("Muted $player for $durationMinutes minutes in MineChat.", NamedTextColor.GREEN)
@@ -119,12 +115,12 @@ class MinechatCommands(private val services: PluginServices) {
         player: String,
         @Default("Warning issued by an operator.") @Named("reason") reason: String?
     ) {
-        val modPayload = ModerationPayload(
-            action = ModerationAction.WARN,
-            scope = ModerationScope.CLIENT,
-            reason = reason
+        getClientConnection(player)?.sendModeration(
+            ModerationAction.WARN,
+            ModerationScope.CLIENT,
+            reason,
+            null
         )
-        services.broadcastToClients(PacketTypes.MODERATION, modPayload)
 
         actor.reply { Component.text("Warned $player in MineChat.", NamedTextColor.GREEN) }
     }
@@ -143,13 +139,6 @@ class MinechatCommands(private val services: PluginServices) {
             return
         }
 
-        val modPayload = ModerationPayload(
-            action = ModerationAction.KICK,
-            scope = ModerationScope.CLIENT,
-            reason = reason
-        )
-        services.broadcastToClients(PacketTypes.MODERATION, modPayload)
-
         clientConnection.sendModerationAndDisconnect(
             ModerationAction.KICK,
             ModerationScope.CLIENT,
@@ -160,7 +149,47 @@ class MinechatCommands(private val services: PluginServices) {
         actor.reply { Component.text("Kicked $player from MineChat.", NamedTextColor.GREEN) }
     }
 
-    private fun getClientConnection(username: String): ClientConnection? {
+    @Subcommand("link")
+    @Description("Generate a link code for your MineChat client")
+    fun link(actor: BukkitCommandActor) {
+        val player = actor.asPlayer()!!
+
+        val code = services.generateRandomLinkCode()
+        val link = LinkCode(
+            code = code,
+            minecraftUuid = player.uniqueId,
+            minecraftUsername = player.name,
+            expiresAt = System.currentTimeMillis() + (services.mineChatConfig.expiryCodeMinutes * 60_000L)
+        )
+        services.linkCodeStorage.add(link)
+
+        val codeComponent = Component.text(code, NamedTextColor.DARK_AQUA)
+        val timeComponent = Component.text("${services.mineChatConfig.expiryCodeMinutes} minutes", NamedTextColor.DARK_GREEN)
+        actor.reply {
+            miniMessage.deserialize(
+                "<gray>Your link code is <code>. Use it within <deadline></gray>",
+                Placeholder.component("code", codeComponent),
+                Placeholder.component("deadline", timeComponent)
+            )
+        }
+    }
+
+    @Subcommand("reload")
+    @Description("Reload the MineChat configuration")
+    @CommandPermission("minechat.reload")
+    fun reload(actor: BukkitCommandActor) {
+        services.reloadConfigAndDependencies()
+        actor.reply { Component.text("MineChat config reloaded.", NamedTextColor.GREEN) }
+
+        val infoMsg = "MineChat configuration has been reloaded by an administrator."
+        val chatPayload = ChatMessagePayload(
+            format = "commonmark",
+            content = "<gradient:${ChatGradients.INFO.first}:${ChatGradients.INFO.second}>$infoMsg</gradient>"
+        )
+        services.broadcastToClients(PacketTypes.CHAT_MESSAGE, chatPayload)
+    }
+
+    fun getClientConnection(username: String): ClientConnection? {
         return services.connectedClients.find { it.getClient()?.minecraftUsername == username }
     }
 }

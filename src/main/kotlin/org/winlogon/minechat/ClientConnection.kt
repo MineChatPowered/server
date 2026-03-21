@@ -478,6 +478,16 @@ class ClientConnection(
      * Sends a MODERATION packet to the client, then closes the connection.
      * Used for kick/ban actions per the protocol spec.
      */
+    fun sendModeration(action: Int, scope: Int, reason: String?, durationSeconds: Int?) {
+        val payload = ModerationPayload(action, scope, reason, durationSeconds)
+        try {
+            val packet = MineChatPacket(PacketTypes.MODERATION, payload)
+            sendPacket(packet)
+        } catch (e: Exception) {
+            logger.warning("Failed to send MODERATION packet: ${e.message}")
+        }
+    }
+
     fun sendModerationAndDisconnect(action: Int, scope: Int, reason: String?, durationSeconds: Int?) {
         val payload = ModerationPayload(action, scope, reason, durationSeconds)
         try {
