@@ -10,6 +10,8 @@ kotlin = "2.1.10"
 asynccraftr = "0.1.0"
 jackson = "2.17.1"
 junit = "1.11.4"
+lamp = "4.0.0-rc.16"
+bouncycastle = "1.78.1"
 
 [libraries]
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
@@ -27,3 +29,7 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 paper-api-test = { module = "io.papermc.paper:paper-api", version.ref = "paper" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+lamp-common = { module = "io.github.revxrsal:lamp.common", version.ref = "lamp" }
+lamp-bukkit = { module = "io.github.revxrsal:lamp.bukkit", version.ref = "lamp" }
+bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+bouncycastle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }

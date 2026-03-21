@@ -6,6 +6,7 @@ import org.bukkit.plugin.java.JavaPlugin
 import org.winlogon.minechat.storage.BanStorage
 import org.winlogon.minechat.storage.ClientStorage
 import org.winlogon.minechat.storage.LinkCodeStorage
+import org.winlogon.minechat.storage.MuteStorage
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
@@ -20,6 +21,7 @@ interface PluginServices {
     val linkCodeStorage: LinkCodeStorage
     val clientStorage: ClientStorage
     val banStorage: BanStorage
+    val muteStorage: MuteStorage
     val mineChatConfig: MineChatConfig
     val permissions: Map<String, Permission>
     val miniMessage: MiniMessage

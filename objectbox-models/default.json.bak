@@ -109,43 +109,9 @@
         }
       ],
       "relations": []
-    },
-    {
-      "id": "4:6958750941419045219",
-      "lastPropertyId": "5:5319143051283895924",
-      "name": "Mute",
-      "properties": [
-        {
-          "id": "1:8172979278374430940",
-          "name": "id",
-          "type": 6,
-          "flags": 1
-        },
-        {
-          "id": "2:1508760538124810708",
-          "name": "minecraftUsername",
-          "type": 9
-        },
-        {
-          "id": "3:7638135965629405415",
-          "name": "reason",
-          "type": 9
-        },
-        {
-          "id": "4:7919972677485099509",
-          "name": "createdAt",
-          "type": 6
-        },
-        {
-          "id": "5:5319143051283895924",
-          "name": "expiresAt",
-          "type": 6
-        }
-      ],
-      "relations": []
     }
   ],
-  "lastEntityId": "4:6958750941419045219",
+  "lastEntityId": "3:2559959171573362814",
   "lastIndexId": "0:0",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",

@@ -2,6 +2,7 @@ package org.winlogon.minechat.storage
 
 import io.objectbox.Box
 import io.objectbox.BoxStore
+
 import org.winlogon.minechat.entities.Ban
 import org.winlogon.minechat.entities.Ban_
 

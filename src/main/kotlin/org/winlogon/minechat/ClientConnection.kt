@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalSerializationApi::class)
+
 package org.winlogon.minechat
 
 import com.github.luben.zstd.Zstd
@@ -43,7 +45,6 @@ class ClientConnection(
         val MINECHAT_PREFIX_COMPONENT: Component = LegacyComponentSerializer.legacyAmpersand().deserialize(MINECHAT_PREFIX_STRING)
     }
 
-    @OptIn(ExperimentalSerializationApi::class)
     val cbor = createCbor()
 
     val reader = DataInputStream(socket.inputStream)
@@ -81,7 +82,6 @@ class ClientConnection(
      * This method runs continuously until the client disconnects
      * or an error occurs, reading and processing MineChat protocol packets.
      */
-    @OptIn(ExperimentalSerializationApi::class)
     override fun run() {
         try {
             logger.fine("ClientConnection.run() started for ${socket.remoteSocketAddress}")
@@ -248,7 +248,6 @@ class ClientConnection(
         return MineChatPacket(packetType, payload)
     }
 
-    @OptIn(ExperimentalSerializationApi::class)
     private fun sendPacket(mineChatPacket: MineChatPacket) {
         try {
             logger.info("sendPacket: serializing packetType=${mineChatPacket.packetType}")
@@ -337,7 +336,7 @@ class ClientConnection(
         }
 
         // Check ban by Minecraft UUID
-        banStorage.getBan(null, link.minecraftUuid?.toString())?.let {
+        banStorage.getBan(null, link.minecraftUuid.toString())?.let {
             sendBannedMessage(it)
             return
         }

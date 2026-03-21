@@ -88,6 +88,10 @@ dependencies {
     compileOnly(libs.paper.api)
     compileOnly(libs.kotlin.reflect)
     compileOnly(libs.asynccraftr)
+    compileOnly(libs.lamp.common)
+    compileOnly(libs.lamp.bukkit)
+    compileOnly(libs.bouncycastle.bcprov)
+    compileOnly(libs.bouncycastle.bcpkix)
     implementation(libs.kaml)
 
     implementation(libs.jackson.dataformat.cbor)

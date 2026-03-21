@@ -14,11 +14,30 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 
 import org.bukkit.entity.Player
 import org.bukkit.event.Listener
+import org.winlogon.minechat.commands.MinechatCommands
 import org.winlogon.minechat.entities.Ban
 import org.winlogon.minechat.entities.LinkCode
+import revxrsal.commands.Lamp
+import revxrsal.commands.bukkit.BukkitLamp
 
 class CommandRegister(private val services: PluginServices) : Listener {
+
+    private var lamp: Lamp<*>? = null
+
     fun registerCommands() {
+        registerLampCommands()
+        registerLegacyCommands()
+    }
+
+    private fun registerLampCommands() {
+        lamp = BukkitLamp.builder(services.pluginInstance)
+            .build()
+            .also { lamp ->
+                lamp.register(MinechatCommands(services))
+            }
+    }
+
+    private fun registerLegacyCommands() {
         val linkCommand = Commands.literal("link")
             .requires { sender -> sender.executor is Player }
             .executes { ctx ->
@@ -44,87 +63,10 @@ class CommandRegister(private val services: PluginServices) : Listener {
             }
             .build()
 
-        val banCommand = Commands.literal("minechat-ban")
-            .requires { sender -> sender.sender.hasPermission(services.permissions["ban"]!!) }
-            .then(Commands.argument("player", StringArgumentType.word())
-                .executes { ctx ->
-                    val playerName = StringArgumentType.getString(ctx, "player")
-                    val client = services.clientStorage.find(null, playerName)
-                    if (client == null) {
-                        ctx.source.sender.sendMessage(Component.text("Player not found.").color(NamedTextColor.RED))
-                        return@executes 0
-                    }
-                    val reason = "Banned by an operator."
-                    val ban = Ban(minecraftUsername = playerName, reason = reason)
-                    services.banStorage.add(ban)
-
-                    // Notify other clients
-                    val modPayload = ModerationPayload(
-                        action = ModerationAction.BAN,
-                        scope = ModerationScope.ACCOUNT,
-                        reason = reason
-                    )
-                    services.broadcastToClients(PacketTypes.MODERATION, modPayload)
-
-                    // Disconnect the client if online
-                    getClientConnection(playerName)?.sendModerationAndDisconnect(ModerationAction.BAN, ModerationScope.ACCOUNT, reason, null)
-
-                    ctx.source.sender.sendMessage(Component.text("Banned $playerName from MineChat.").color(NamedTextColor.GREEN))
-                    Command.SINGLE_SUCCESS
-                }
-            )
-            .build()
-
-        val unbanCommand = Commands.literal("minechat-unban")
-            .requires { sender -> sender.sender.hasPermission("minechat.unban") }
-            .then(Commands.argument("player", StringArgumentType.word())
-                .executes { ctx ->
-                    val playerName = StringArgumentType.getString(ctx, "player")
-                    services.banStorage.remove(null, playerName)
-                    ctx.source.sender.sendMessage(Component.text("Unbanned $playerName from MineChat.").color(NamedTextColor.GREEN))
-                    Command.SINGLE_SUCCESS
-                }
-            )
-            .build()
-
-        val kickCommand = Commands.literal("minechat-kick")
-            .requires { sender -> sender.sender.hasPermission("minechat.kick") }
-            .then(Commands.argument("player", StringArgumentType.word())
-                .executes { ctx ->
-                    val playerName = StringArgumentType.getString(ctx, "player")
-                    val clientConnection = this.getClientConnection(playerName)
-                    if (clientConnection == null) {
-                        ctx.source.sender.sendRichMessage("<red>Player not found or not connected via MineChat.</red>")
-                        return@executes 0
-                    }
-                    val reason = "Kicked by an operator."
-
-                    // Notify other clients
-                    val modPayload = ModerationPayload(
-                        action = ModerationAction.KICK,
-                        scope = ModerationScope.CLIENT,
-                        reason = reason
-                    )
-                    services.broadcastToClients(PacketTypes.MODERATION, modPayload)
-
-                    clientConnection.sendModerationAndDisconnect(ModerationAction.KICK, ModerationScope.CLIENT, reason, null)
-                    ctx.source.sender.sendRichMessage(
-                        "<green>Kicked <player> from MineChat.</green>",
-                        Placeholder.unparsed("player", playerName)
-                    )
-                    Command.SINGLE_SUCCESS
-                }
-            )
-            .build()
-
         services.pluginInstance.lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
             val registrar = event.registrar()
-
             registrar.register(linkCommand, "Generate a MineChat link code for your account.")
             registrar.register(reloadCommand, "Reload the MineChat configuration and services.")
-            registrar.register(banCommand, "Ban a player from using MineChat.")
-            registrar.register(unbanCommand, "Remove a MineChat ban from a player.")
-            registrar.register(kickCommand, "Kick a player from the MineChat client.")
         }
     }
 
