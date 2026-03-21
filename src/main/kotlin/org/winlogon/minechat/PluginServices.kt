@@ -28,6 +28,5 @@ interface PluginServices {
     val connectedClients: ConcurrentLinkedQueue<ClientConnection>
 
     fun reloadConfigAndDependencies()
-    fun generateRandomLinkCode(): String
     fun broadcastToClients(packetType: Int, payload: PacketPayload)
 }

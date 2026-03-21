@@ -15,10 +15,10 @@ class MineChatLoader : PluginLoader {
     private val versions = mapOf(
         "caffeine" to "3.2.0",
         "zstd-jni" to "1.5.6-1",
-        "objectbox" to "3.8.0",
         "asynccraftr" to "0.2.0",
         "lamp" to "4.0.0-rc.16",
-        "bouncycastle" to "1.78.1"
+        "bouncycastle" to "1.78.1",
+        "sqlite-jdbc" to "3.51.2.0",
     )
 
     override fun classloader(classpathBuilder: PluginClasspathBuilder) {
@@ -27,17 +27,17 @@ class MineChatLoader : PluginLoader {
         val dependencies = arrayOf(
             library("com.github.ben-manes.caffeine", "caffeine", versions["caffeine"]!!),
             library("com.github.luben", "zstd-jni", versions["zstd-jni"]!!),
-            library("io.objectbox", "objectbox-kotlin", versions["objectbox"]!!),
             library("org.winlogon", "asynccraftr", versions["asynccraftr"]!!),
             library("io.github.revxrsal", "lamp.common", versions["lamp"]!!),
             library("io.github.revxrsal", "lamp.bukkit", versions["lamp"]!!),
             library("org.bouncycastle", "bcprov-jdk18on", versions["bouncycastle"]!!),
-            library("org.bouncycastle", "bcpkix-jdk18on", versions["bouncycastle"]!!)
+            library("org.bouncycastle", "bcpkix-jdk18on", versions["bouncycastle"]!!),
+            library("org.xerial", "sqlite-jdbc", versions["sqlite-jdbc"]!!),
         )
 
         val repositories = arrayOf(
             repo("maven-central", MavenLibraryResolver.MAVEN_CENTRAL_DEFAULT_MIRROR),
-            repo("objectbox", "https://download.objectbox.io/maven")
+            repo("winlogon-libs", "https://maven.winlogon.org/releases")
         )
 
         for (dependency in dependencies) {
