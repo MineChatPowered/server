@@ -11,7 +11,9 @@ import org.winlogon.minechat.entities.Client_
 
 class ClientStorage(boxStore: BoxStore) {
     private val clientBox: Box<Client> = boxStore.boxFor(Client::class.java)
-    private val clientCache: Cache<String, Client> = Caffeine.newBuilder().build()
+    private val clientCache: Cache<String, Client> = Caffeine.newBuilder()
+        .maximumSize(1000)
+        .build()
 
     /**
      * Finds a client by either client UUID or Minecraft username.

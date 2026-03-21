@@ -84,6 +84,7 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
             false
         }
 
+        logger.info("Running on ${if (isFolia) "Paper with Folia" else "Paper"}")
         loggerProvider = PluginLoggerProvider(this)
 
         reloadConfigAndDependencies()
@@ -92,6 +93,7 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
         permissions = mapOf(
             "reload" to Permission("minechat.reload", "Reloads the MineChat configuration."),
             "ban" to Permission("minechat.ban", "Bans a player from the MineChat server."),
+            "unban" to Permission("minechat.unban", "Removes a ban from a player."),
             "mute" to Permission("minechat.mute", "Mutes a player from the MineChat server."),
             "warn" to Permission("minechat.warn", "Warns a player in the MineChat server."),
             "kick" to Permission("minechat.kick", "Kicks a player from the MineChat server."),
@@ -105,6 +107,8 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
         clientStorage = ClientStorage(boxStore)
         banStorage = BanStorage(boxStore)
         muteStorage = MuteStorage(boxStore)
+
+        muteStorage.cleanExpired()
 
         CommandRegister(this).registerCommands()
         val tls = mineChatConfig.tls
@@ -194,7 +198,6 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
         }, this)
     }
 
-    @EventHandler
     fun onChat(event: AsyncChatEvent) {
         val playerName = event.player.name
 
@@ -226,8 +229,8 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
         isServerRunning = false
         serverThread?.interrupt()
         serverSocket?.close()
-        // Send SYSTEM_DISCONNECT to all clients before shutting down
         connectedClients.forEach { it.sendSystemDisconnect(SystemDisconnectReason.SHUTDOWN, "Server is shutting down.") }
+        linkCodeStorage.close()
         executorService.shutdownNow()
         try {
             executorService.awaitTermination(10, TimeUnit.SECONDS)

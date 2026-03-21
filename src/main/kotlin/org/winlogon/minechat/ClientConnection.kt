@@ -51,7 +51,7 @@ class ClientConnection(
     val writer = DataOutputStream(socket.outputStream)
 
     private var client: Client? = null
-    private var running = true
+    private val running = AtomicBoolean(true)
 
 
     /** Tracks if LINK_OK has been sent */
@@ -70,7 +70,7 @@ class ClientConnection(
     init {
         // Schedule periodic PING messages every 10 seconds
         scheduledExecutor.scheduleAtFixedRate({
-            if (running && !disconnected.get()) {
+            if (running.get() && !disconnected.get()) {
                 sendPing()
             }
         }, 10, 10, TimeUnit.SECONDS)
@@ -87,7 +87,7 @@ class ClientConnection(
             logger.fine("ClientConnection.run() started for ${socket.remoteSocketAddress}")
 
             // Main packet processing loop
-            while (running && !disconnected.get()) {
+            while (running.get() && !disconnected.get()) {
                 // Check keep-alive timeout
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastPacketTime > keepAliveTimeout) {
@@ -190,7 +190,7 @@ class ClientConnection(
             logger.info("Client disconnected")
             return
         } catch (e: Exception) {
-            if (running && !disconnected.get()) {
+            if (running.get() && !disconnected.get()) {
                 logger.severe("Client error in run loop: ${e.message}")
                 e.printStackTrace()
             }
@@ -274,7 +274,7 @@ class ClientConnection(
     }
 
     fun close() {
-        running = false
+        running.set(false)
         disconnected.set(true)
         scheduledExecutor.shutdown()
         try {
