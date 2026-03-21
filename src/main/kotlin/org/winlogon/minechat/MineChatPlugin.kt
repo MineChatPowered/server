@@ -200,14 +200,13 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
 
         if (muteStorage.isMuted(playerName)) {
             val mute = muteStorage.getMute(playerName)
-            val remainingTime = mute?.expiresAt?.let {
-                val remaining = (it - System.currentTimeMillis()) / 60000
-                if (remaining > 0) "${remaining.toInt()} minutes" else null
-            }
-            val message = if (remainingTime != null) {
-                "You are muted. Expires in $remainingTime."
-            } else {
-                "You are muted."
+            val message = when {
+                mute?.isPermanent() == true -> "You are permanently muted."
+                mute?.expiresAt != null -> {
+                    val remaining = (mute.expiresAt - System.currentTimeMillis()) / 60000
+                    "You are muted. Expires in ${remaining.toInt()} minutes."
+                }
+                else -> "You are muted."
             }
             event.isCancelled = true
             event.player.sendMessage(Component.text(message, NamedTextColor.RED))
