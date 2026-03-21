@@ -16,7 +16,7 @@ class MineChatLoader : PluginLoader {
         "caffeine" to "3.2.0",
         "zstd-jni" to "1.5.6-1",
         "objectbox" to "3.8.0",
-        "asynccraftr" to "0.1.0",
+        "asynccraftr" to "0.2.0",
         "lamp" to "4.0.0-rc.16",
         "bouncycastle" to "1.78.1"
     )
