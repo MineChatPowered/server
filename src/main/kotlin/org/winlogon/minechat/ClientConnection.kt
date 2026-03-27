@@ -260,12 +260,12 @@ class ClientConnection(
 
     private fun sendPacket(mineChatPacket: MineChatPacket) {
         try {
-            logger.info("sendPacket: serializing packetType=${mineChatPacket.packetType}")
+            logger.fine("sendPacket: serializing packetType=${mineChatPacket.packetType}")
             val serialized = CBOR.encodeToByteArray(MineChatPacket, mineChatPacket)
-            logger.info("sendPacket: serialized ${serialized.size} bytes")
+            logger.fine("sendPacket: serialized ${serialized.size} bytes")
 
             val compressed = Zstd.compress(serialized)
-            logger.info("sendPacket: compressed to ${compressed.size} bytes")
+            logger.fine("sendPacket: compressed to ${compressed.size} bytes")
 
             if (serialized.size > Int.MAX_VALUE || compressed.size > Int.MAX_VALUE) {
                 throw IllegalArgumentException("Packet too large")
