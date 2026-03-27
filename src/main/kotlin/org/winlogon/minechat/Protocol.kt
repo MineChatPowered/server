@@ -71,7 +71,8 @@ data class LinkOkPayload(
 
 @Serializable
 data class CapabilitiesPayload(
-    @CborLabel(0) val supports_components: Boolean
+    @CborLabel(0) val supported_formats: List<String>,
+    @CborLabel(1) val preferred_format: String? = null
 ) : PacketPayload()
 
 @Serializable

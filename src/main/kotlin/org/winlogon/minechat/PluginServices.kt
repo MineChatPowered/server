@@ -1,5 +1,6 @@
 package org.winlogon.minechat
 
+import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.permissions.Permission
 import org.bukkit.plugin.java.JavaPlugin
@@ -29,4 +30,5 @@ interface PluginServices {
 
     fun reloadConfigAndDependencies()
     fun broadcastToClients(packetType: Int, payload: PacketPayload)
+    fun broadcastChatMessage(format: String, content: String, component: Component)
 }

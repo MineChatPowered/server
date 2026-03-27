@@ -43,9 +43,8 @@ class ClientConnection(
     companion object {
         const val MINECHAT_PREFIX_STRING = "&8[&3MineChat&8]"
         val MINECHAT_PREFIX_COMPONENT: Component = LegacyComponentSerializer.legacyAmpersand().deserialize(MINECHAT_PREFIX_STRING)
+        val CBOR = createCbor()
     }
-
-    val cbor = createCbor()
 
     val reader = DataInputStream(socket.inputStream)
     val writer = DataOutputStream(socket.outputStream)
@@ -58,6 +57,10 @@ class ClientConnection(
     private var linkAuthCompleted = false
     /** Tracks if CAPABILITIES has been received */
     private var capabilitiesReceived = false
+    /** Supported formats from client's CAPABILITIES packet */
+    private var supportedFormats: List<String> = emptyList()
+    /** Preferred format from client's CAPABILITIES packet */
+    private var preferredFormat: String? = null
 
     // Keep-alive timeout tracking
     private var lastPacketTime = System.currentTimeMillis()
@@ -86,9 +89,8 @@ class ClientConnection(
         try {
             logger.fine("ClientConnection.run() started for ${socket.remoteSocketAddress}")
 
-            // Main packet processing loop
             while (running.get() && !disconnected.get()) {
-                // Check keep-alive timeout
+                // Keep-alive timeout
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastPacketTime > keepAliveTimeout) {
                     logger.warning("Client connection timed out after ${keepAliveTimeout}ms of inactivity")
@@ -122,8 +124,7 @@ class ClientConnection(
                     try {
                         decompressed = Zstd.decompress(compressed, decompressedLen)
                     } catch (t: Throwable) {
-                        logger.log(Level.SEVERE, "Zstd.decompress EXCEPTION: ${t.javaClass.name}: ${t.message}", t)
-                        t.printStackTrace()
+                        logger.log(Level.SEVERE, "Decompression failed: ${t.javaClass.name}: ${t.message}", t)
                         break
                     }
                     logger.fine("Decompression complete: ${decompressed.size} bytes")
@@ -137,7 +138,7 @@ class ClientConnection(
                     logger.fine("Decompressed CBOR: len=${decompressed.size}, hex=$hexPreview")
 
                     val mineChatPacket = try {
-                        cbor.decodeFromByteArray(MineChatPacket, decompressed)
+                        CBOR.decodeFromByteArray(MineChatPacket, decompressed)
                     } catch (e: Exception) {
                         logger.log(Level.SEVERE, "CBOR deserialization failed: ${e.message}", e)
                         e.printStackTrace()
@@ -149,34 +150,7 @@ class ClientConnection(
                     // Update last packet time for any received packet
                     lastPacketTime = System.currentTimeMillis()
 
-                    when (mineChatPacket.packetType) {
-                        PacketTypes.LINK -> {
-                            val payload = mineChatPacket.payload as LinkPayload
-                            logger.fine("Received LINK message: $payload")
-                            handleAuth(payload)
-                        }
-                        PacketTypes.CAPABILITIES -> {
-                            val payload = mineChatPacket.payload as CapabilitiesPayload
-                            logger.fine("Received CAPABILITIES message: $payload")
-                            handleCapabilities(payload)
-                        }
-                        PacketTypes.CHAT_MESSAGE -> {
-                            val payload = mineChatPacket.payload as ChatMessagePayload
-                            logger.fine("Received CHAT_MESSAGE message: $payload")
-                            handleChat(payload)
-                        }
-                        PacketTypes.PING -> {
-                            val payload = mineChatPacket.payload as PingPayload
-                            logger.fine("Received PING message: $payload")
-                            handlePing(payload)
-                        }
-                        PacketTypes.PONG -> {
-                            val payload = mineChatPacket.payload as PongPayload
-                            logger.fine("Received PONG message: $payload")
-                            handlePong(payload)
-                        }
-                        else -> logger.warning("Unknown packet type: ${mineChatPacket.packetType}")
-                    }
+                    handlePacketType(mineChatPacket)
                 } catch (e: Exception) {
                     logger.severe("Error in packet processing: ${e.message}")
                     e.printStackTrace()
@@ -200,6 +174,42 @@ class ClientConnection(
             }
             close()
             plugin.removeClient(this)
+        }
+    }
+
+    fun handlePacketType(mineChatPacket: MineChatPacket) {
+        when (mineChatPacket.packetType) {
+            PacketTypes.LINK -> {
+                val payload = mineChatPacket.payload as LinkPayload
+                logger.fine("Received LINK message: $payload")
+                handleAuth(payload)
+            }
+
+            PacketTypes.CAPABILITIES -> {
+                val payload = mineChatPacket.payload as CapabilitiesPayload
+                logger.fine("Received CAPABILITIES message: $payload")
+                handleCapabilities(payload)
+            }
+
+            PacketTypes.CHAT_MESSAGE -> {
+                val payload = mineChatPacket.payload as ChatMessagePayload
+                logger.fine("Received CHAT_MESSAGE message: $payload")
+                handleChat(payload)
+            }
+
+            PacketTypes.PING -> {
+                val payload = mineChatPacket.payload as PingPayload
+                logger.fine("Received PING message: $payload")
+                handlePing(payload)
+            }
+
+            PacketTypes.PONG -> {
+                val payload = mineChatPacket.payload as PongPayload
+                logger.fine("Received PONG message: $payload")
+                handlePong(payload)
+            }
+
+            else -> logger.warning("Unknown packet type: ${mineChatPacket.packetType}")
         }
     }
 
@@ -251,7 +261,7 @@ class ClientConnection(
     private fun sendPacket(mineChatPacket: MineChatPacket) {
         try {
             logger.info("sendPacket: serializing packetType=${mineChatPacket.packetType}")
-            val serialized = cbor.encodeToByteArray(MineChatPacket, mineChatPacket)
+            val serialized = CBOR.encodeToByteArray(MineChatPacket, mineChatPacket)
             logger.info("sendPacket: serialized ${serialized.size} bytes")
 
             val compressed = Zstd.compress(serialized)
@@ -383,24 +393,29 @@ class ClientConnection(
             return
         }
 
+        supportedFormats = payload.supported_formats
+        preferredFormat = payload.preferred_format
+
+        val supportsComponents = supportedFormats.contains("components")
+
         client?.let { client ->
             plugin.clientStorage.add(
                 client.clientUuid,
                 client.minecraftUuid,
                 client.minecraftUsername,
-                payload.supports_components
+                supportsComponents
             )
 
             sendMessage(PacketTypes.AUTH_OK, AuthOkPayload())
             capabilitiesReceived = true
 
-            if (client.supportsComponents) {
+            if (supportsComponents) {
                 broadcastMinecraft(ChatGradients.JOIN, "${client.minecraftUsername} has joined the chat.")
             } else {
                 broadcastMinecraft(ChatGradients.AUTH, "${client.minecraftUsername} has successfully authenticated.")
             }
 
-            logger.info("Client ${client.minecraftUsername} authenticated with capabilities: supportsComponents=${client.supportsComponents}")
+            logger.info("Client ${client.minecraftUsername} authenticated with capabilities: supportedFormats=${supportedFormats}, preferredFormat=${preferredFormat}")
         } ?: run {
             logger.warning("Received CAPABILITIES packet but client is null. This should not happen.")
             disconnect()
@@ -409,12 +424,22 @@ class ClientConnection(
 
     private fun handleChat(payload: ChatMessagePayload) {
         if (this.client == null) return
+        if (!capabilitiesReceived) {
+            logger.warning("Received CHAT_MESSAGE before CAPABILITIES. Ignoring.")
+            return
+        }
+
+        // Validate format against supported_formats per spec Section 8.5
+        val format = payload.format
+        if (format !in supportedFormats) {
+            logger.warning("Client sent message in unsupported format '$format'. Supported: $supportedFormats. Ignoring.")
+            return
+        }
 
         // Get the username for prefixing
         val username = this.client?.minecraftUsername ?: return
 
         // Process the chat message
-        val format = payload.format
         val content = payload.content
 
         if (format == "commonmark") {
@@ -503,6 +528,58 @@ class ClientConnection(
             logger.warning("Failed to send MODERATION packet: ${e.message}")
         }
         close()
+    }
+
+    /**
+     * Sends a CHAT_MESSAGE to this client, respecting the client's capabilities.
+     * Per spec: Must send in a format declared in supported_formats, preferring preferred_format.
+     * Note: The sourceComponent should already include the username prefix.
+     */
+    fun sendChatMessage(sourceFormat: String, sourceContent: String, sourceComponent: Component) {
+        if (!capabilitiesReceived) return
+
+        val targetFormat = selectFormatForClient(sourceFormat)
+        if (targetFormat == null) {
+            logger.fine("Cannot send message to ${client?.minecraftUsername}: no compatible format")
+            return
+        }
+
+        val content = if (targetFormat == "components") {
+            GsonComponentSerializer.gson().serialize(sourceComponent)
+        } else {
+            sourceContent
+        }
+
+        val payload = ChatMessagePayload(targetFormat, content)
+        try {
+            val packet = MineChatPacket(PacketTypes.CHAT_MESSAGE, payload)
+            sendPacket(packet)
+        } catch (e: Exception) {
+            logger.warning("Failed to send CHAT_MESSAGE to client: ${e.message}")
+        }
+    }
+
+    /**
+     * Selects the best format to send to this client.
+     * Per spec: MUST use a format in supported_formats, SHOULD use preferred_format.
+     */
+    private fun selectFormatForClient(sourceFormat: String): String? {
+        if (sourceFormat in supportedFormats) {
+            val pref = preferredFormat
+            if (pref != null && pref in supportedFormats && pref != sourceFormat) {
+                return pref
+            }
+            return sourceFormat
+        }
+
+        // Source format not supported - try preferred format
+        val pref = preferredFormat
+        if (pref != null && pref in supportedFormats) {
+            return pref
+        }
+
+        // Fall back to first supported format
+        return supportedFormats.firstOrNull()
     }
 
     /**

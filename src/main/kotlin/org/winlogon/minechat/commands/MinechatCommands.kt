@@ -177,11 +177,9 @@ class MinechatCommands(private val services: PluginServices) {
         actor.reply { Component.text("MineChat config reloaded.", NamedTextColor.GREEN) }
 
         val infoMsg = "MineChat configuration has been reloaded by an administrator."
-        val chatPayload = ChatMessagePayload(
-            format = "commonmark",
-            content = "<gradient:${ChatGradients.INFO.first}:${ChatGradients.INFO.second}>$infoMsg</gradient>"
-        )
-        services.broadcastToClients(PacketTypes.CHAT_MESSAGE, chatPayload)
+        val gradientColor = "<gradient:${ChatGradients.INFO.first}:${ChatGradients.INFO.second}>$infoMsg</gradient>"
+        val component = miniMessage.deserialize(gradientColor)
+        services.broadcastChatMessage("commonmark", gradientColor, component)
     }
 
     fun getClientConnection(username: String): ClientConnection? {
