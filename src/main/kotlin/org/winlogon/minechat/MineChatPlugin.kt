@@ -30,8 +30,13 @@ import java.util.concurrent.TimeUnit
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLServerSocket
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509KeyManager
+import javax.net.ssl.X509TrustManager
+import java.security.cert.X509Certificate
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.ExperimentalSerializationApi
+import javax.net.ssl.KeyManager
 
 class MineChatPlugin : JavaPlugin(), PluginServices {
     private var serverSocket: ServerSocket? = null
@@ -96,9 +101,9 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
     }
 
     override fun onEnable() {
-        // Initialize with default config first to prevent UninitializedPropertyAccessException
-        // if reloadConfigAndDependencies() fails or throws an exception
-        mineChatConfig = MineChatConfig()
+        if (!::mineChatConfig.isInitialized) {
+            mineChatConfig = MineChatConfig()
+        }
 
         databaseManager = DatabaseManager(this)
         databaseManager.createTables()
@@ -142,14 +147,24 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
             val keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
             keyManagerFactory.init(keyStore, keystorePassword)
 
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(keyManagerFactory.keyManagers, null, null)
+            val delegateKeyManager = keyManagerFactory.keyManagers.filterIsInstance<X509KeyManager>().firstOrNull()
+                ?: throw IllegalStateException("No X509KeyManager found")
+
+            val trustManager = object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out X509Certificate>, authType: String) {}
+                override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+            }
+
+            val sslContext = SSLContext.getInstance("TLSv1.3")
+            sslContext.init(arrayOf<KeyManager>(delegateKeyManager), arrayOf<TrustManager>(trustManager), null)
 
             val sslServerSocketFactory = sslContext.serverSocketFactory
             serverSocket = sslServerSocketFactory.createServerSocket(mineChatConfig.port)
 
-            // Enforce TLS 1.3
-            (serverSocket as SSLServerSocket).enabledProtocols = arrayOf("TLSv1.3")
+            (serverSocket as SSLServerSocket).apply {
+                enabledProtocols = arrayOf("TLSv1.3")
+            }
 
             logger.info("MineChat server started with TLS 1.3 on port ${mineChatConfig.port}")
         } catch (e: Exception) {

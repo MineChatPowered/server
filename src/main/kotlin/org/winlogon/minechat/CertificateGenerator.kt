@@ -1,9 +1,11 @@
 package org.winlogon.minechat
 
 import org.bouncycastle.asn1.DERBitString
+import org.bouncycastle.asn1.x509.ExtendedKeyUsage
 import org.bouncycastle.asn1.x509.Extension
 import org.bouncycastle.asn1.x509.GeneralName
 import org.bouncycastle.asn1.x509.GeneralNames
+import org.bouncycastle.asn1.x509.KeyPurposeId
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -149,22 +151,21 @@ object CertificateGenerator {
 
         certBuilder.addExtension(
             Extension.basicConstraints,
-            true,
-            byteArrayOf(0x30, 0x03, 0x01, 0x01, 0x00)
+            false,
+            byteArrayOf(0x30, 0x00)
         )
 
-        val keyUsageBitString = DERBitString(byteArrayOf(0xA0.toByte(), 0x00))
         certBuilder.addExtension(
             Extension.keyUsage,
-            true,
-            keyUsageBitString
+            false,
+            DERBitString(byteArrayOf(0x80.toByte(), 0x00))
         )
 
         certBuilder.addExtension(
             Extension.extendedKeyUsage,
             false,
-            org.bouncycastle.asn1.x509.ExtendedKeyUsage(
-                org.bouncycastle.asn1.x509.KeyPurposeId.id_kp_serverAuth
+            ExtendedKeyUsage(
+                KeyPurposeId.id_kp_serverAuth
             )
         )
 
