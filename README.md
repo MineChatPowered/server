@@ -12,7 +12,7 @@ The plugin works by generating temporary codes that players can use to authentic
 
 - **Client authentication**: MineChat clients authenticate by using the generated link code or by reusing their stored client UUID.
 - **Chat broadcast**: In-game chat is broadcast to all connected MineChat clients and vice versa.
-- **Persistent Storage**: The plugin stores link codes and client information in ObjectBox, so that data remains between server restarts.
+- **Persistent Storage**: The plugin stores link codes and client information in SQLite, so that data remains between server restarts.
 - **Automatic cleanup**: Expired link codes are cleaned up automatically every minute.
 - **TLS certificates**: Self-signed certificates are generated programmatically (no external tools required).
 

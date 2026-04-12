@@ -5,11 +5,9 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 
 import org.winlogon.minechat.ChatGradients
-import org.winlogon.minechat.ChatMessagePayload
 import org.winlogon.minechat.ClientConnection
 import org.winlogon.minechat.ModerationAction
 import org.winlogon.minechat.ModerationScope
-import org.winlogon.minechat.PacketTypes
 import org.winlogon.minechat.PluginServices
 
 import revxrsal.commands.annotation.Command

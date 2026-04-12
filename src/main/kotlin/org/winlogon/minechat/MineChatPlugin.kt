@@ -4,7 +4,6 @@
 package org.winlogon.minechat
 
 import com.charleskorn.kaml.Yaml
-import com.github.luben.zstd.Zstd
 
 import io.papermc.paper.event.player.AsyncChatEvent
 
@@ -256,19 +255,11 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
         }
     }
 
-    private val cbor = createCbor()
-
     override fun broadcastToClients(packetType: Int, payload: PacketPayload) {
         connectedClients.forEach { client ->
             try {
                 val mineChatPacket = MineChatPacket(packetType, payload)
-                val serialized = cbor.encodeToByteArray(MineChatPacket, mineChatPacket)
-                val compressed = Zstd.compress(serialized)
-
-                client.writer.writeInt(serialized.size)
-                client.writer.writeInt(compressed.size)
-                client.writer.write(compressed)
-                client.writer.flush()
+                client.sendPacket(mineChatPacket)
             } catch (e: Exception) {
                 logger.warning("Error sending message to client: ${e.message}")
                 connectedClients.remove(client)
@@ -278,9 +269,11 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
 
     /**
      * Broadcasts a chat message to all connected clients, respecting each client's capabilities.
+     * The sender is excluded from receiving their own message back.
      */
-    override fun broadcastChatMessage(format: String, content: String, component: Component) {
+    override fun broadcastChatMessage(format: String, content: String, component: Component, sender: ClientConnection?) {
         connectedClients.forEach { client ->
+            if (client == sender) return@forEach
             try {
                 client.sendChatMessage(format, content, component)
             } catch (e: Exception) {

@@ -21,6 +21,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
 import java.util.logging.Level
 import java.util.logging.Logger
 
@@ -41,13 +42,14 @@ class ClientConnection(
     private val plugin: MineChatPlugin
 ) : Runnable {
     companion object {
-        const val MINECHAT_PREFIX_STRING = "&8[&3MineChat&8]"
+        const val MINECHAT_PREFIX_STRING = "&8[&5MineChat&8]"
         val MINECHAT_PREFIX_COMPONENT: Component = LegacyComponentSerializer.legacyAmpersand().deserialize(MINECHAT_PREFIX_STRING)
         val CBOR = createCbor()
     }
 
     val reader = DataInputStream(socket.inputStream)
-    val writer = DataOutputStream(socket.outputStream)
+    private val writer = DataOutputStream(socket.outputStream)
+    private val writerLock = ReentrantLock()
 
     private var client: CachedClient? = null
     private val running = AtomicBoolean(true)
@@ -258,7 +260,8 @@ class ClientConnection(
         return MineChatPacket(packetType, payload)
     }
 
-    private fun sendPacket(mineChatPacket: MineChatPacket) {
+    fun sendPacket(mineChatPacket: MineChatPacket) {
+        writerLock.lock()
         try {
             logger.fine("sendPacket: serializing packetType=${mineChatPacket.packetType}")
             val serialized = CBOR.encodeToByteArray(MineChatPacket, mineChatPacket)
@@ -280,6 +283,8 @@ class ClientConnection(
             logger.severe("sendPacket failed: ${e.message}")
             e.printStackTrace()
             throw e
+        } finally {
+            writerLock.unlock()
         }
     }
 
@@ -452,6 +457,7 @@ class ClientConnection(
             }
 
             broadcastMinecraft(formatPrefixed(component, username))
+            plugin.broadcastChatMessage(format, content, formatPrefixed(component, username), this)
         } else if (format == "components") {
             // Parse JSON component format and send to Minecraft
             val component = try {
@@ -462,6 +468,7 @@ class ClientConnection(
             }
 
             broadcastMinecraft(formatPrefixed(component, username))
+            plugin.broadcastChatMessage(format, content, formatPrefixed(component, username), this)
         }
     }
 
