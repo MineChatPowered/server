@@ -46,7 +46,6 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
     private val executorService = Executors.newVirtualThreadPerTaskExecutor()
 
     override val connectedClients = ConcurrentLinkedQueue<ClientConnection>()
-    lateinit var loggerProvider: PluginLoggerProvider
     override lateinit var linkCodeStorage: LinkCodeStorage
     override lateinit var clientStorage: ClientStorage
     override lateinit var banStorage: BanStorage
@@ -82,7 +81,6 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
         }
 
         logger.info("Running on ${if (isFolia) "Paper with Folia" else "Paper"}")
-        loggerProvider = PluginLoggerProvider(this)
 
         reloadConfigAndDependencies()
         dataFolder.mkdirs()

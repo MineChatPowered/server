@@ -15,24 +15,24 @@ import revxrsal.commands.annotation.Default
 import revxrsal.commands.annotation.Description
 import revxrsal.commands.annotation.Named
 import revxrsal.commands.annotation.Subcommand
+import revxrsal.commands.annotation.Switch
 import revxrsal.commands.bukkit.actor.BukkitCommandActor
 import revxrsal.commands.bukkit.annotation.CommandPermission
 
-/**
- * MineChat moderation commands using Lamp command framework.
- */
 @Command("minechat")
 @Description("MineChat server moderation commands")
 class MinechatCommands(private val services: PluginServices) {
-    val miniMessage = services.miniMessage
+    private val miniMessage = services.miniMessage
+    private val config get() = services.mineChatConfig
 
-    @Subcommand("ban")
+@Subcommand("ban")
     @Description("Ban a player from MineChat")
     @CommandPermission("minechat.ban")
     fun ban(
         actor: BukkitCommandActor,
         player: String,
-        @Default("Banned by an operator.") @Named("reason") reason: String?
+        @Switch("a") @Description("Apply to all clients linked to the player's account") affectAccount: Boolean = false,
+        @Default("") @Named("reason") @Description("Reason for the ban") reason: String?
     ) {
         val client = services.clientStorage.find(null, player)
         if (client == null) {
@@ -40,21 +40,30 @@ class MinechatCommands(private val services: PluginServices) {
             return
         }
 
+        val message = reason?.takeIf { it.isNotBlank() } ?: config.moderationDefaults.banMessage
+        val scope = if (affectAccount) ModerationScope.ACCOUNT else ModerationScope.CLIENT
+
         services.banStorage.add(
             clientUuid = client.clientUuid,
             minecraftUuid = client.minecraftUuid,
             minecraftUsername = player,
-            reason = reason
+            reason = message
         )
 
-        getClientConnection(player)?.sendModerationAndDisconnect(
-            ModerationAction.BAN,
-            ModerationScope.ACCOUNT,
-            reason,
-            null
-        )
+        val clientConn = getClientConnection(player)
+        if (clientConn != null) {
+            clientConn.sendModerationAndDisconnect(
+                ModerationAction.BAN,
+                scope,
+                message,
+                null
+            )
+        } else if (scope == ModerationScope.ACCOUNT) {
+            actor.reply { Component.text("Note: $player is not connected, but ban applies to their account.", NamedTextColor.YELLOW) }
+        }
 
-        actor.reply { Component.text("Banned $player from MineChat.", NamedTextColor.GREEN) }
+        val scopeText = if (scope == ModerationScope.ACCOUNT) " (all clients)" else ""
+        actor.reply { Component.text("Banned $player from MineChat$scopeText.", NamedTextColor.GREEN) }
     }
 
     @Subcommand("unban")
@@ -71,25 +80,48 @@ class MinechatCommands(private val services: PluginServices) {
     fun mute(
         actor: BukkitCommandActor,
         player: String,
-        @Default("5") durationMinutes: Int,
-        @Default("Muted by an operator.") @Named("reason") reason: String?
+        @Switch("a") @Description("Apply to all clients linked to the player's account") affectAccount: Boolean = false,
+        @Default("") @Named("duration") @Description("Duration in minutes, or 'perm' for permanent") durationMinutes: String?,
+        @Default("") @Named("reason") @Description("Reason for the mute") reason: String?
     ) {
+        val defaultDuration = config.muteDefaultMinutes
+        val duration = when {
+            durationMinutes.isNullOrBlank() -> defaultDuration
+            durationMinutes == "perm" || durationMinutes == "permanent" -> -1
+            else -> durationMinutes.toIntOrNull() ?: defaultDuration
+        }
+
+        if (duration <= 0 && duration != -1) {
+            actor.reply { Component.text("Invalid duration. Use a positive number or 'perm'.", NamedTextColor.RED) }
+            return
+        }
+
+        val message = reason?.takeIf { it.isNotBlank() } ?: config.moderationDefaults.muteMessage
+        val scope = if (affectAccount) ModerationScope.ACCOUNT else ModerationScope.CLIENT
+        val expiresAt = if (duration == -1) null else System.currentTimeMillis() + (duration.toLong() * 60 * 1000)
+
         services.muteStorage.add(
             minecraftUsername = player,
-            reason = reason,
-            expiresAt = System.currentTimeMillis() + (durationMinutes.toLong() * 60 * 1000)
+            reason = message,
+            expiresAt = expiresAt
         )
 
-        getClientConnection(player)?.sendModeration(
-            ModerationAction.MUTE,
-            ModerationScope.CLIENT,
-            reason,
-            durationMinutes * 60
-        )
-
-        actor.reply {
-            Component.text("Muted $player for $durationMinutes minutes in MineChat.", NamedTextColor.GREEN)
+        val clientConn = getClientConnection(player)
+        if (clientConn != null) {
+            val durationSeconds = if (duration == -1) null else duration * 60
+            clientConn.sendModeration(
+                ModerationAction.MUTE,
+                scope,
+                message,
+                durationSeconds
+            )
+        } else {
+            actor.reply { Component.text("Note: $player is not currently connected to MineChat. Mute will be applied when they connect.", NamedTextColor.YELLOW) }
         }
+
+        val durationText = if (duration == -1) "permanently" else "for $duration minutes"
+        val scopeText = if (scope == ModerationScope.ACCOUNT) " (all clients)" else ""
+        actor.reply { Component.text("Muted $player $durationText$scopeText in MineChat.", NamedTextColor.GREEN) }
     }
 
     @Subcommand("unmute")
@@ -106,16 +138,27 @@ class MinechatCommands(private val services: PluginServices) {
     fun warn(
         actor: BukkitCommandActor,
         player: String,
-        @Default("Warning issued by an operator.") @Named("reason") reason: String?
+        @Switch("a") @Description("Apply to all clients linked to the player's account") affectAccount: Boolean = false,
+        @Default("") @Named("reason") @Description("Reason for the warning") reason: String?
     ) {
-        getClientConnection(player)?.sendModeration(
-            ModerationAction.WARN,
-            ModerationScope.CLIENT,
-            reason,
-            null
-        )
+        val message = reason?.takeIf { it.isNotBlank() } ?: config.moderationDefaults.warnMessage
+        val scope = if (affectAccount) ModerationScope.ACCOUNT else ModerationScope.CLIENT
 
-        actor.reply { Component.text("Warned $player in MineChat.", NamedTextColor.GREEN) }
+        val clientConn = getClientConnection(player)
+        if (clientConn != null) {
+            clientConn.sendModeration(
+                ModerationAction.WARN,
+                scope,
+                message,
+                null
+            )
+        } else {
+            actor.reply { Component.text("Note: $player is not currently connected to MineChat. Warning cannot be delivered.", NamedTextColor.YELLOW) }
+            return
+        }
+
+        val scopeText = if (scope == ModerationScope.ACCOUNT) " (all clients)" else ""
+        actor.reply { Component.text("Warned $player in MineChat$scopeText.", NamedTextColor.GREEN) }
     }
 
     @Subcommand("kick")
@@ -124,22 +167,27 @@ class MinechatCommands(private val services: PluginServices) {
     fun kick(
         actor: BukkitCommandActor,
         player: String,
-        @Default("Kicked by an operator.") @Named("reason") reason: String?
+        @Switch("a") @Description("Apply to all clients linked to the player's account") affectAccount: Boolean = false,
+        @Default("") @Named("reason") @Description("Reason for the kick") reason: String?
     ) {
-        val clientConnection = getClientConnection(player)
-        if (clientConnection == null) {
+        val message = reason?.takeIf { it.isNotBlank() } ?: config.moderationDefaults.kickMessage
+        val scope = if (affectAccount) ModerationScope.ACCOUNT else ModerationScope.CLIENT
+
+        val clientConn = getClientConnection(player)
+        if (clientConn == null) {
             actor.reply { Component.text("Player not found or not connected via MineChat.", NamedTextColor.RED) }
             return
         }
 
-        clientConnection.sendModerationAndDisconnect(
+        clientConn.sendModerationAndDisconnect(
             ModerationAction.KICK,
-            ModerationScope.CLIENT,
-            reason,
+            scope,
+            message,
             null
         )
 
-        actor.reply { Component.text("Kicked $player from MineChat.", NamedTextColor.GREEN) }
+        val scopeText = if (scope == ModerationScope.ACCOUNT) " (all clients)" else ""
+        actor.reply { Component.text("Kicked $player from MineChat$scopeText.", NamedTextColor.GREEN) }
     }
 
     @Subcommand("link")
@@ -150,14 +198,14 @@ class MinechatCommands(private val services: PluginServices) {
 
         val code = generateRandomLinkCode()
         services.linkCodeStorage.add(
-            code = code,
+            code = code.uppercase(),
             minecraftUuid = player.uniqueId,
             minecraftUsername = player.name,
-            expiresAt = System.currentTimeMillis() + (services.mineChatConfig.expiryCodeMinutes * 60_000L)
+            expiresAt = System.currentTimeMillis() + (config.expiryCodeMinutes * 60_000L)
         )
 
         val codeComponent = Component.text(code, NamedTextColor.DARK_AQUA)
-        val timeComponent = Component.text("${services.mineChatConfig.expiryCodeMinutes} minutes", NamedTextColor.DARK_GREEN)
+        val timeComponent = Component.text("${config.expiryCodeMinutes} minutes", NamedTextColor.DARK_GREEN)
         actor.reply {
             miniMessage.deserialize(
                 "<gray>Your link code is <code>. Use it within <deadline></gray>",
@@ -180,13 +228,13 @@ class MinechatCommands(private val services: PluginServices) {
         services.broadcastChatMessage("commonmark", gradientColor, component)
     }
 
-    fun getClientConnection(username: String): ClientConnection? {
+    private fun getClientConnection(username: String): ClientConnection? {
         return services.connectedClients.find {
             it.getClient()?.minecraftUsername?.equals(username, ignoreCase = true) == true
         }
     }
 
-    fun generateRandomLinkCode(): String {
+    private fun generateRandomLinkCode(): String {
         val chars = ('A'..'Z') + ('0'..'9')
         return (1..6).map { chars.random() }.joinToString("")
     }

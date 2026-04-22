@@ -37,21 +37,23 @@ class LinkCodeStorage(
     }
 
     fun add(code: String, minecraftUuid: UUID, minecraftUsername: String, expiresAt: Long) {
+        val normalizedCode = code.uppercase()
         databaseManager.asyncQuery {
             LinkCodeTable.insert {
-                it[LinkCodeTable.code] = code
+                it[LinkCodeTable.code] = normalizedCode
                 it[LinkCodeTable.minecraftUuid] = minecraftUuid.toString()
                 it[LinkCodeTable.minecraftUsername] = minecraftUsername
                 it[LinkCodeTable.expiresAt] = expiresAt
             }
         }
-        linkCodeCache.put(code, CachedLinkCode(minecraftUuid, minecraftUsername, expiresAt))
+        linkCodeCache.put(normalizedCode, CachedLinkCode(minecraftUuid, minecraftUsername, expiresAt))
     }
 
     fun find(code: String): CachedLinkCode? {
-        return linkCodeCache.getIfPresent(code) ?: run {
+        val normalizedCode = code.uppercase()
+        return linkCodeCache.getIfPresent(normalizedCode) ?: run {
             val result = databaseManager.syncQuery {
-                LinkCodeTable.selectAll().where { LinkCodeTable.code eq code }.firstOrNull()
+                LinkCodeTable.selectAll().where { LinkCodeTable.code eq normalizedCode }.firstOrNull()
             }.get() ?: return null
 
             val cached = CachedLinkCode(
@@ -59,15 +61,16 @@ class LinkCodeStorage(
                 result[LinkCodeTable.minecraftUsername],
                 result[LinkCodeTable.expiresAt]
             )
-            linkCodeCache.put(code, cached)
+            linkCodeCache.put(normalizedCode, cached)
             cached
         }
     }
 
     fun remove(code: String) {
-        linkCodeCache.invalidate(code)
+        val normalizedCode = code.uppercase()
+        linkCodeCache.invalidate(normalizedCode)
         databaseManager.asyncQuery {
-            LinkCodeTable.deleteWhere { LinkCodeTable.code eq code }
+            LinkCodeTable.deleteWhere { LinkCodeTable.code eq normalizedCode }
         }
     }
 

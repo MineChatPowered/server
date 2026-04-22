@@ -5,8 +5,18 @@
 port: 7632
 
 # The time in minutes before a link code expires.
+# Set to 0 to disable (not recommended).
 # Default: 5
 expiry-code-minutes: 5
+
+# The keep-alive interval in seconds.
+# Default: 15
+keep-alive-seconds: 15
+
+# Default mute duration in minutes.
+# Set to -1 for permanent mute.
+# Default: -1
+mute-default-minutes: -1
 
 # TLS settings for the server.
 tls:
@@ -14,3 +24,11 @@ tls:
   keystore: "keystore.p12"
   # The password for the keystore.
   keystore-password: "password"
+
+# Default messages for moderation actions.
+# These are used when no reason is provided.
+moderation-defaults:
+  ban-message: "Banned by an operator."
+  mute-message: "Muted by an operator."
+  kick-message: "Kicked by an operator."
+  warn-message: "Warning issued by an operator."

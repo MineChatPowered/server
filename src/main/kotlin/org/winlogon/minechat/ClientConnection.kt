@@ -17,6 +17,7 @@ import java.io.DataOutputStream
 import java.io.EOFException
 import java.net.Socket
 import java.net.SocketTimeoutException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
@@ -45,6 +46,7 @@ class ClientConnection(
         const val MINECHAT_PREFIX_STRING = "&8[&5MineChat&8]"
         val MINECHAT_PREFIX_COMPONENT: Component = LegacyComponentSerializer.legacyAmpersand().deserialize(MINECHAT_PREFIX_STRING)
         val CBOR = createCbor()
+        const val MAX_FRAME_SIZE = 1_048_576 // 1 MiB
     }
 
     val reader = DataInputStream(socket.inputStream)
@@ -54,6 +56,8 @@ class ClientConnection(
     private var client: CachedClient? = null
     private val running = AtomicBoolean(true)
 
+    private val logger: Logger
+        get() = plugin.logger
 
     /** Tracks if LINK_OK has been sent */
     private var linkAuthCompleted = false
@@ -66,19 +70,38 @@ class ClientConnection(
 
     // Keep-alive timeout tracking
     private var lastPacketTime = System.currentTimeMillis()
-    private val keepAliveTimeout = 15000L // 15 seconds
     private var currentRtt: Long = 0
+
+    // Pending PING tracking for timestamp validation
+    private val pendingPings = ConcurrentHashMap<Long, Long>()
 
     private val disconnected = AtomicBoolean(false)
     private val scheduledExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
 
+    private val keepAliveIntervalSec: Long
+    private val keepAliveTimeoutMs: Long
+
     init {
-        // Schedule periodic PING messages every 10 seconds
+        val config = plugin.mineChatConfig
+        keepAliveIntervalSec = config.keepAliveSeconds.toLong()
+        keepAliveTimeoutMs = keepAliveIntervalSec * 1000
+
+        // Schedule periodic PING messages based on config
         scheduledExecutor.scheduleAtFixedRate({
             if (running.get() && !disconnected.get()) {
                 sendPing()
             }
-        }, 10, 10, TimeUnit.SECONDS)
+        }, keepAliveIntervalSec, keepAliveIntervalSec, TimeUnit.SECONDS)
+
+        // Schedule cleanup of stale pending PINGs to prevent memory leak
+        scheduledExecutor.scheduleAtFixedRate({
+            cleanupStalePendingPings()
+        }, keepAliveIntervalSec * 2, keepAliveIntervalSec * 2, TimeUnit.SECONDS)
+    }
+
+    private fun cleanupStalePendingPings() {
+        val cutoff = System.currentTimeMillis() - (keepAliveTimeoutMs * 2)
+        pendingPings.keys.removeIf { key -> key < cutoff }
     }
 
     /**
@@ -94,8 +117,8 @@ class ClientConnection(
             while (running.get() && !disconnected.get()) {
                 // Keep-alive timeout
                 val currentTime = System.currentTimeMillis()
-                if (currentTime - lastPacketTime > keepAliveTimeout) {
-                    logger.warning("Client connection timed out after ${keepAliveTimeout}ms of inactivity")
+                if (currentTime - lastPacketTime > keepAliveTimeoutMs) {
+                    logger.warning("Client connection timed out after ${keepAliveTimeoutMs}ms of inactivity")
                     break // Terminate connection
                 }
 
@@ -106,6 +129,12 @@ class ClientConnection(
 
                 if (decompressedLen <= 0 || compressedLen <= 0) {
                     logger.warning("Received non-positive frame size. Terminating connection.")
+                    break
+                }
+
+                // Validate frame size limit (Section 4.5)
+                if (decompressedLen > MAX_FRAME_SIZE || compressedLen > MAX_FRAME_SIZE) {
+                    logger.warning("Frame size exceeds maximum allowed (${MAX_FRAME_SIZE} bytes). Terminating connection.")
                     break
                 }
 
@@ -217,6 +246,7 @@ class ClientConnection(
 
     private fun sendPing() {
         val timestamp = System.currentTimeMillis()
+        pendingPings[timestamp] = timestamp
         sendMessage(PacketTypes.PING, PingPayload(timestamp_ms = timestamp))
     }
 
@@ -478,8 +508,15 @@ class ClientConnection(
     }
 
     private fun handlePong(payload: PongPayload) {
+        val timestamp = payload.timestamp_ms
+        // Validate timestamp matches an outstanding PING per spec Section 8.7
+        val matched = pendingPings.remove(timestamp)
+        if (matched == null) {
+            logger.warning("Received PONG with unknown timestamp $timestamp. Ignoring.")
+            return
+        }
         val now = System.currentTimeMillis()
-        currentRtt = now - payload.timestamp_ms
+        currentRtt = now - timestamp
         logger.info("Received PONG from client with RTT: ${currentRtt}ms")
     }
 
@@ -611,7 +648,4 @@ class ClientConnection(
     fun disconnect() {
         close()
     }
-
-    private val logger: Logger
-        get() = plugin.logger
 }
