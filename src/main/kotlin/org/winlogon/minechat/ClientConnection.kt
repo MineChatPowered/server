@@ -487,7 +487,8 @@ class ClientConnection(
             }
 
             broadcastMinecraft(formatPrefixed(component, username))
-            plugin.broadcastChatMessage(format, content, formatPrefixed(component, username), this)
+            // Send unprefixed component to MineChat clients (source = "minechat")
+            plugin.broadcastChatMessage(format, content, component, this, source = "minechat")
         } else if (format == "components") {
             // Parse JSON component format and send to Minecraft
             val component = try {
@@ -498,7 +499,8 @@ class ClientConnection(
             }
 
             broadcastMinecraft(formatPrefixed(component, username))
-            plugin.broadcastChatMessage(format, content, formatPrefixed(component, username), this)
+            // Send unprefixed component to MineChat clients (source = "minechat")
+            plugin.broadcastChatMessage(format, content, component, this, source = "minechat")
         }
     }
 
@@ -579,7 +581,7 @@ class ClientConnection(
      * Per spec: Must send in a format declared in supported_formats, preferring preferred_format.
      * Note: The sourceComponent should already include the username prefix.
      */
-    fun sendChatMessage(sourceFormat: String, sourceContent: String, sourceComponent: Component) {
+    fun sendChatMessage(sourceFormat: String, sourceContent: String, sourceComponent: Component, source: String = "minecraft") {
         if (!capabilitiesReceived) return
 
         val targetFormat = selectFormatForClient(sourceFormat)
@@ -594,7 +596,7 @@ class ClientConnection(
             sourceContent
         }
 
-        val payload = ChatMessagePayload(targetFormat, content)
+        val payload = ChatMessagePayload(targetFormat, content, source)
         try {
             val packet = MineChatPacket(PacketTypes.CHAT_MESSAGE, payload)
             sendPacket(packet)

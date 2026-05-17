@@ -225,7 +225,7 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
         }
 
         val markdownMsg = MarkdownSerializer.markdown().serialize(event.message())
-        broadcastChatMessage("commonmark", markdownMsg, event.message())
+        broadcastChatMessage("commonmark", markdownMsg, event.message(), source = "minecraft")
     }
 
     override fun onDisable() {
@@ -269,11 +269,11 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
      * Broadcasts a chat message to all connected clients, respecting each client's capabilities.
      * The sender is excluded from receiving their own message back.
      */
-    override fun broadcastChatMessage(format: String, content: String, component: Component, sender: ClientConnection?) {
+    override fun broadcastChatMessage(format: String, content: String, component: Component, sender: ClientConnection? = null, source: String = "minecraft") {
         connectedClients.forEach { client ->
             if (client == sender) return@forEach
             try {
-                client.sendChatMessage(format, content, component)
+                client.sendChatMessage(format, content, component, source)
             } catch (e: Exception) {
                 logger.warning("Error sending message to client: ${e.message}")
                 connectedClients.remove(client)

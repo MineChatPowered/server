@@ -30,5 +30,5 @@ interface PluginServices {
 
     fun reloadConfigAndDependencies()
     fun broadcastToClients(packetType: Int, payload: PacketPayload)
-    fun broadcastChatMessage(format: String, content: String, component: Component, sender: ClientConnection? = null)
+    fun broadcastChatMessage(format: String, content: String, component: Component, sender: ClientConnection? = null, source: String = "minecraft")
 }

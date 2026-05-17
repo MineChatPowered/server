@@ -81,7 +81,8 @@ class AuthOkPayload : PacketPayload()
 @Serializable
 data class ChatMessagePayload(
     @CborLabel(0) val format: String,
-    @CborLabel(1) val content: String
+    @CborLabel(1) val content: String,
+    @CborLabel(2) val source: String = "minecraft"
 ) : PacketPayload()
 
 @Serializable
