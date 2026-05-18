@@ -20,11 +20,12 @@ import java.time.Duration
 
 class LinkCodeStorage(
     plugin: JavaPlugin,
-    private val databaseManager: DatabaseManager
+    private val databaseManager: DatabaseManager,
+    expiryMinutes: Int = 5
 ) : AutoCloseable {
     private var cleanupTask: Task? = null
     private val linkCodeCache: Cache<String, CachedLinkCode> = Caffeine.newBuilder()
-        .expireAfterWrite(Duration.ofMinutes(5))
+        .expireAfterWrite(Duration.ofMinutes(expiryMinutes.toLong()))
         .build()
 
     init {

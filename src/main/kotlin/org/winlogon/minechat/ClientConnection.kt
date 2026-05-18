@@ -353,6 +353,16 @@ class ClientConnection(
         if (linkCode.isEmpty()) {
             val existingClient = plugin.clientStorage.find(clientUuid, null)
             if (existingClient != null) {
+                // Check ban by client UUID
+                plugin.banStorage.getBan(clientUuid, null)?.let {
+                    sendBannedMessage(it)
+                    return
+                }
+                // Check ban by Minecraft UUID (account scope)
+                plugin.banStorage.getBan(null, existingClient.minecraftUuid.toString())?.let {
+                    sendBannedMessage(it)
+                    return
+                }
                 this.client = existingClient
                 sendMessage(PacketTypes.LINK_OK, LinkOkPayload(minecraft_uuid = existingClient.minecraftUuid.toString()))
                 linkAuthCompleted = true
@@ -372,7 +382,7 @@ class ClientConnection(
             return
         }
 
-        // Check if link code is expired (15 minutes)
+        // Check if link code is expired
         if (System.currentTimeMillis() > link.expiresAt) {
             logger.warning("Expired link code: $linkCode")
             plugin.linkCodeStorage.remove(linkCode)
@@ -425,6 +435,13 @@ class ClientConnection(
 
         if (capabilitiesReceived) {
             logger.warning("Received duplicate CAPABILITIES packet. Ignoring.")
+            return
+        }
+
+        // Validate 'components' is in supported_formats
+        if (!payload.supported_formats.contains("components")) {
+            logger.warning("Client CAPABILITIES missing 'components' format. Disconnecting.")
+            disconnect()
             return
         }
 

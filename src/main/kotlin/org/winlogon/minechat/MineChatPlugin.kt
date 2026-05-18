@@ -105,7 +105,7 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
         databaseManager = DatabaseManager(this)
         databaseManager.createTables()
 
-        linkCodeStorage = LinkCodeStorage(this, databaseManager)
+        linkCodeStorage = LinkCodeStorage(this, databaseManager, mineChatConfig.expiryCodeMinutes)
         clientStorage = ClientStorage(databaseManager)
         banStorage = BanStorage(databaseManager)
         muteStorage = MuteStorage(databaseManager)
@@ -269,7 +269,7 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
      * Broadcasts a chat message to all connected clients, respecting each client's capabilities.
      * The sender is excluded from receiving their own message back.
      */
-    override fun broadcastChatMessage(format: String, content: String, component: Component, sender: ClientConnection? = null, source: String = "minecraft") {
+    override fun broadcastChatMessage(format: String, content: String, component: Component, sender: ClientConnection?, source: String) {
         connectedClients.forEach { client ->
             if (client == sender) return@forEach
             try {
