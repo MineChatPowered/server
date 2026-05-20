@@ -202,6 +202,7 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
             @EventHandler
             fun onPlayerJoin(event: PlayerJoinEvent) {
                 muteStorage.cleanExpired()
+                banStorage.cleanExpired()
             }
         }, this)
     }

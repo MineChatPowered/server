@@ -32,38 +32,70 @@ class MinechatCommands(private val services: PluginServices) {
         actor: BukkitCommandActor,
         player: String,
         @Switch("a") @Description("Apply to all clients linked to the player's account") affectAccount: Boolean = false,
+        @Default("-1") @Named("duration") @Description("Duration in minutes, -1 for permanent") durationMinutes: Int = -1,
         @Default("") @Named("reason") @Description("Reason for the ban") reason: String?
     ) {
-        val client = services.clientStorage.find(null, player)
-        if (client == null) {
+        if (durationMinutes == 0) {
+            actor.reply { Component.text("Duration cannot be 0. Use a positive number or -1 for permanent.", NamedTextColor.RED) }
+            return
+        }
+
+        val clients = services.clientStorage.findByUsername(player)
+        if (clients.isEmpty()) {
             actor.reply { Component.text("Player not found.", NamedTextColor.RED) }
             return
         }
 
         val message = reason?.takeIf { it.isNotBlank() } ?: config.moderationDefaults.banMessage
         val scope = if (affectAccount) ModerationScope.ACCOUNT else ModerationScope.CLIENT
+        val expiresAt = if (durationMinutes == -1) null else System.currentTimeMillis() + (durationMinutes.toLong() * 60 * 1000)
 
-        services.banStorage.add(
-            clientUuid = client.clientUuid,
-            minecraftUuid = client.minecraftUuid,
-            minecraftUsername = player,
-            reason = message
-        )
-
-        val clientConn = getClientConnection(player)
-        if (clientConn != null) {
-            clientConn.sendModerationAndDisconnect(
-                ModerationAction.BAN,
-                scope,
-                message,
-                null
+        if (scope == ModerationScope.CLIENT) {
+            val singleClient = clients.first()
+            services.banStorage.add(
+                clientUuid = singleClient.clientUuid,
+                minecraftUuid = singleClient.minecraftUuid,
+                minecraftUsername = player,
+                reason = message,
+                expiresAt = expiresAt
             )
-        } else if (scope == ModerationScope.ACCOUNT) {
-            actor.reply { Component.text("Note: $player is not connected, but ban applies to their account.", NamedTextColor.YELLOW) }
+
+            val clientConn = getClientConnectionByUuid(singleClient.clientUuid)
+            if (clientConn != null) {
+                clientConn.sendModerationAndDisconnect(
+                    ModerationAction.BAN,
+                    scope,
+                    message,
+                    null
+                )
+            }
+        } else {
+            services.banStorage.add(
+                clientUuid = null,
+                minecraftUuid = clients.first().minecraftUuid,
+                minecraftUsername = player,
+                reason = message,
+                expiresAt = expiresAt
+            )
+
+            val clientConns = getAllClientConnections(player)
+            if (clientConns.isNotEmpty()) {
+                clientConns.forEach { clientConn ->
+                    clientConn.sendModerationAndDisconnect(
+                        ModerationAction.BAN,
+                        scope,
+                        message,
+                        null
+                    )
+                }
+            } else {
+                actor.reply { Component.text("Note: $player is not connected, but ban applies to their account.", NamedTextColor.YELLOW) }
+            }
         }
 
+        val durationText = if (durationMinutes == -1) " permanently" else " for $durationMinutes minutes"
         val scopeText = if (scope == ModerationScope.ACCOUNT) " (all clients)" else ""
-        actor.reply { Component.text("Banned $player from MineChat$scopeText.", NamedTextColor.GREEN) }
+        actor.reply { Component.text("Banned $player from MineChat$durationText$scopeText.", NamedTextColor.GREEN) }
     }
 
     @Subcommand("unban")
@@ -106,16 +138,18 @@ class MinechatCommands(private val services: PluginServices) {
             expiresAt = expiresAt
         )
 
-        val clientConn = getClientConnection(player)
-        if (clientConn != null) {
-            val durationSeconds = if (duration == -1) null else duration * 60
-            clientConn.sendModeration(
-                ModerationAction.MUTE,
-                scope,
-                message,
-                durationSeconds
-            )
-        } else {
+        val clientConns = getAllClientConnections(player)
+        val durationSeconds = if (duration == -1) null else duration * 60
+        if (clientConns.isNotEmpty()) {
+            clientConns.forEach { clientConn ->
+                clientConn.sendModeration(
+                    ModerationAction.MUTE,
+                    scope,
+                    message,
+                    durationSeconds
+                )
+            }
+        } else if (scope == ModerationScope.CLIENT) {
             actor.reply { Component.text("Note: $player is not currently connected to MineChat. Mute will be applied when they connect.", NamedTextColor.YELLOW) }
         }
 
@@ -144,14 +178,16 @@ class MinechatCommands(private val services: PluginServices) {
         val message = reason?.takeIf { it.isNotBlank() } ?: config.moderationDefaults.warnMessage
         val scope = if (affectAccount) ModerationScope.ACCOUNT else ModerationScope.CLIENT
 
-        val clientConn = getClientConnection(player)
-        if (clientConn != null) {
-            clientConn.sendModeration(
-                ModerationAction.WARN,
-                scope,
-                message,
-                null
-            )
+        val clientConns = getAllClientConnections(player)
+        if (clientConns.isNotEmpty()) {
+            clientConns.forEach { clientConn ->
+                clientConn.sendModeration(
+                    ModerationAction.WARN,
+                    scope,
+                    message,
+                    null
+                )
+            }
         } else {
             actor.reply { Component.text("Note: $player is not currently connected to MineChat. Warning cannot be delivered.", NamedTextColor.YELLOW) }
             return
@@ -230,6 +266,18 @@ class MinechatCommands(private val services: PluginServices) {
 
     private fun getClientConnection(username: String): ClientConnection? {
         return services.connectedClients.find {
+            it.getClient()?.minecraftUsername?.equals(username, ignoreCase = true) == true
+        }
+    }
+
+    private fun getClientConnectionByUuid(clientUuid: String): ClientConnection? {
+        return services.connectedClients.find {
+            it.getClient()?.clientUuid == clientUuid
+        }
+    }
+
+    private fun getAllClientConnections(username: String): List<ClientConnection> {
+        return services.connectedClients.filter {
             it.getClient()?.minecraftUsername?.equals(username, ignoreCase = true) == true
         }
     }

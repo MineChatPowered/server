@@ -61,11 +61,12 @@ class ClientStorage(
     }
 
     fun add(clientUuid: String, minecraftUuid: UUID?, minecraftUsername: String, supportsComponents: Boolean) {
-        val existing = find(null, minecraftUsername)
+        val existing = find(clientUuid, null)
         if (existing != null) {
             databaseManager.asyncQuery {
-                ClientTable.update({ ClientTable.minecraftUsername eq minecraftUsername }) {
-                    it[ClientTable.clientUuid] = clientUuid
+                ClientTable.update({ ClientTable.clientUuid eq clientUuid }) {
+                    it[ClientTable.minecraftUuid] = minecraftUuid?.toString()
+                    it[ClientTable.minecraftUsername] = minecraftUsername
                     it[ClientTable.supportsComponents] = supportsComponents
                 }
             }
@@ -80,6 +81,26 @@ class ClientStorage(
                 }
             }
             clientCache.put(clientUuid, CachedClient(clientUuid, minecraftUuid, minecraftUsername, supportsComponents))
+        }
+    }
+
+    fun findByUsername(minecraftUsername: String): List<CachedClient> {
+        val cached = clientCache.asMap().values.filter { it.minecraftUsername == minecraftUsername }
+        if (cached.isNotEmpty()) return cached
+
+        val results = databaseManager.syncQuery {
+            ClientTable.selectAll().where { ClientTable.minecraftUsername eq minecraftUsername }
+        }.get()
+
+        return results.map {
+            val cachedClient = CachedClient(
+                it[ClientTable.clientUuid],
+                it[ClientTable.minecraftUuid]?.let { uuid -> UUID.fromString(uuid) },
+                it[ClientTable.minecraftUsername],
+                it[ClientTable.supportsComponents]
+            )
+            clientCache.put(cachedClient.clientUuid, cachedClient)
+            cachedClient
         }
     }
 

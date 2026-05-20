@@ -4,7 +4,7 @@ import org.jetbrains.exposed.v1.core.Table
 
 object ClientTable : Table("clients") {
     val id = long("id").autoIncrement()
-    val clientUuid = text("client_uuid")
+    val clientUuid = text("client_uuid").uniqueIndex()
     val minecraftUuid = text("minecraft_uuid").nullable()
     val minecraftUsername = text("minecraft_username")
     val supportsComponents = bool("supports_components").clientDefault { false }

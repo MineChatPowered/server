@@ -353,15 +353,17 @@ class ClientConnection(
         if (linkCode.isEmpty()) {
             val existingClient = plugin.clientStorage.find(clientUuid, null)
             if (existingClient != null) {
-                // Check ban by client UUID
+                // Check ban by client UUID (device scope)
                 plugin.banStorage.getBan(clientUuid, null)?.let {
                     sendBannedMessage(it)
                     return
                 }
                 // Check ban by Minecraft UUID (account scope)
-                plugin.banStorage.getBan(null, existingClient.minecraftUuid.toString())?.let {
-                    sendBannedMessage(it)
-                    return
+                existingClient.minecraftUuid?.let { uuid ->
+                    plugin.banStorage.getBanByMinecraftUuid(uuid)?.let {
+                        sendBannedMessage(it)
+                        return
+                    }
                 }
                 this.client = existingClient
                 sendMessage(PacketTypes.LINK_OK, LinkOkPayload(minecraft_uuid = existingClient.minecraftUuid.toString()))
@@ -390,8 +392,8 @@ class ClientConnection(
             return
         }
 
-        // Check ban by Minecraft UUID
-        banStorage.getBan(null, link.minecraftUuid.toString())?.let {
+        // Check ban by Minecraft UUID (account scope)
+        banStorage.getBanByMinecraftUuid(link.minecraftUuid)?.let {
             sendBannedMessage(it)
             return
         }

@@ -9,6 +9,7 @@ object BanTable : Table("bans") {
     val minecraftUsername = text("minecraft_username").nullable()
     val reason = text("reason").nullable()
     val timestamp = long("timestamp").clientDefault { System.currentTimeMillis() }
+    val expiresAt = long("expires_at").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

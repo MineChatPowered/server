@@ -1,7 +1,10 @@
 package org.winlogon.minechat.storage
 
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.isNotNull
+import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -14,7 +17,7 @@ import java.util.UUID
 class BanStorage(
     private val databaseManager: DatabaseManager
 ) {
-    fun add(clientUuid: String?, minecraftUuid: UUID?, minecraftUsername: String?, reason: String?) {
+    fun add(clientUuid: String?, minecraftUuid: UUID?, minecraftUsername: String?, reason: String?, expiresAt: Long? = null) {
         databaseManager.asyncQuery {
             BanTable.insert {
                 it[BanTable.clientUuid] = clientUuid
@@ -22,6 +25,7 @@ class BanStorage(
                 it[BanTable.minecraftUsername] = minecraftUsername
                 it[BanTable.reason] = reason
                 it[BanTable.timestamp] = System.currentTimeMillis()
+                it[BanTable.expiresAt] = expiresAt
             }
         }
     }
@@ -52,7 +56,24 @@ class BanStorage(
                 .firstOrNull()
         }.get()
 
-        return result?.toBanInfo()
+        return result?.toBanInfo()?.takeIf { !it.isExpired() }
+    }
+
+    fun getBanByMinecraftUuid(minecraftUuid: UUID): BanInfo? {
+        val result = databaseManager.syncQuery {
+            BanTable.selectAll()
+                .where { BanTable.minecraftUuid eq minecraftUuid.toString() }
+                .firstOrNull()
+        }.get()
+
+        return result?.toBanInfo()?.takeIf { !it.isExpired() }
+    }
+
+    fun cleanExpired() {
+        val now = System.currentTimeMillis()
+        databaseManager.asyncQuery {
+            BanTable.deleteWhere { BanTable.expiresAt.isNotNull() and (BanTable.expiresAt less now) }
+        }
     }
 
     private fun ResultRow.toBanInfo() = BanInfo(
@@ -60,7 +81,8 @@ class BanStorage(
         minecraftUuid = this[BanTable.minecraftUuid]?.let(UUID::fromString),
         minecraftUsername = this[BanTable.minecraftUsername],
         reason = this[BanTable.reason],
-        timestamp = this[BanTable.timestamp]
+        timestamp = this[BanTable.timestamp],
+        expiresAt = this[BanTable.expiresAt]
     )
 
     data class BanInfo(
@@ -68,6 +90,10 @@ class BanStorage(
         val minecraftUuid: UUID?,
         val minecraftUsername: String?,
         val reason: String?,
-        val timestamp: Long
-    )
+        val timestamp: Long,
+        val expiresAt: Long?
+    ) {
+        fun isExpired(): Boolean = expiresAt != null && System.currentTimeMillis() > expiresAt
+        fun isPermanent(): Boolean = expiresAt == null
+    }
 }
