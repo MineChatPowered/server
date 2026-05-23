@@ -8,6 +8,7 @@ import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 
 import org.winlogon.minechat.DatabaseManager
 import org.winlogon.minechat.entities.BanTable
@@ -18,14 +19,27 @@ class BanStorage(
     private val databaseManager: DatabaseManager
 ) {
     fun add(clientUuid: String?, minecraftUuid: UUID?, minecraftUsername: String?, reason: String?, expiresAt: Long? = null) {
-        databaseManager.asyncQuery {
-            BanTable.insert {
-                it[BanTable.clientUuid] = clientUuid
-                it[BanTable.minecraftUuid] = minecraftUuid?.toString()
-                it[BanTable.minecraftUsername] = minecraftUsername
-                it[BanTable.reason] = reason
-                it[BanTable.timestamp] = System.currentTimeMillis()
-                it[BanTable.expiresAt] = expiresAt
+        val existing = if (clientUuid != null) getBan(clientUuid, null) else minecraftUsername?.let { getBan(null, it) }
+        if (existing != null) {
+            val condition = if (clientUuid != null) BanTable.clientUuid eq clientUuid else BanTable.minecraftUsername eq minecraftUsername!!
+            databaseManager.asyncQuery {
+                BanTable.update({ condition }) {
+                    it[BanTable.minecraftUuid] = minecraftUuid?.toString()
+                    it[BanTable.reason] = reason
+                    it[BanTable.timestamp] = System.currentTimeMillis()
+                    it[BanTable.expiresAt] = expiresAt
+                }
+            }
+        } else {
+            databaseManager.asyncQuery {
+                BanTable.insert {
+                    it[BanTable.clientUuid] = clientUuid
+                    it[BanTable.minecraftUuid] = minecraftUuid?.toString()
+                    it[BanTable.minecraftUsername] = minecraftUsername
+                    it[BanTable.reason] = reason
+                    it[BanTable.timestamp] = System.currentTimeMillis()
+                    it[BanTable.expiresAt] = expiresAt
+                }
             }
         }
     }

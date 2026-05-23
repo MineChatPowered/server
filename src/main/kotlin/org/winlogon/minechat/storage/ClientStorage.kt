@@ -3,6 +3,7 @@ package org.winlogon.minechat.storage
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 
+import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -13,6 +14,14 @@ import org.winlogon.minechat.entities.ClientTable
 
 import java.util.UUID
 
+
+data class CachedClient(
+    val clientUuid: String,
+    val minecraftUuid: UUID?,
+    val minecraftUsername: String,
+    val supportsComponents: Boolean
+)
+
 class ClientStorage(
     private val databaseManager: DatabaseManager
 ) {
@@ -20,41 +29,32 @@ class ClientStorage(
         .maximumSize(1000)
         .build()
 
+    private fun ResultRow.toCachedClient(): CachedClient = CachedClient(
+        this[ClientTable.clientUuid],
+        this[ClientTable.minecraftUuid]?.let { UUID.fromString(it) },
+        this[ClientTable.minecraftUsername],
+        this[ClientTable.supportsComponents]
+    )
+
+    private fun cacheAndReturn(row: ResultRow, cacheKey: String): CachedClient {
+        val client = row.toCachedClient()
+        clientCache.put(cacheKey, client)
+        return client
+    }
+
     fun find(clientUuid: String?, minecraftUsername: String?): CachedClient? {
         if (clientUuid != null) {
             return clientCache.getIfPresent(clientUuid) ?: run {
-                val result = databaseManager.syncQuery {
+                databaseManager.syncQuery {
                     ClientTable.selectAll().where { ClientTable.clientUuid eq clientUuid }.firstOrNull()
-                }.get()
-
-                result?.let {
-                    val cached = CachedClient(
-                        it[ClientTable.clientUuid],
-                        it[ClientTable.minecraftUuid]?.let { uuid -> UUID.fromString(uuid) },
-                        it[ClientTable.minecraftUsername],
-                        it[ClientTable.supportsComponents]
-                    )
-                    clientCache.put(clientUuid, cached)
-                    cached
-                }
+                }.get()?.let { cacheAndReturn(it, clientUuid) }
             }
         }
         if (minecraftUsername != null) {
             return clientCache.asMap().values.find { it.minecraftUsername == minecraftUsername } ?: run {
-                val result = databaseManager.syncQuery {
+                databaseManager.syncQuery {
                     ClientTable.selectAll().where { ClientTable.minecraftUsername eq minecraftUsername }.firstOrNull()
-                }.get()
-
-                result?.let {
-                    val cached = CachedClient(
-                        it[ClientTable.clientUuid],
-                        it[ClientTable.minecraftUuid]?.let { uuid -> UUID.fromString(uuid) },
-                        it[ClientTable.minecraftUsername],
-                        it[ClientTable.supportsComponents]
-                    )
-                    clientCache.put(cached.clientUuid, cached)
-                    cached
-                }
+                }.get()?.let { cacheAndReturn(it, it[ClientTable.clientUuid]) }
             }
         }
         return null
@@ -88,26 +88,8 @@ class ClientStorage(
         val cached = clientCache.asMap().values.filter { it.minecraftUsername == minecraftUsername }
         if (cached.isNotEmpty()) return cached
 
-        val results = databaseManager.syncQuery {
+        return databaseManager.syncQuery {
             ClientTable.selectAll().where { ClientTable.minecraftUsername eq minecraftUsername }
-        }.get()
-
-        return results.map {
-            val cachedClient = CachedClient(
-                it[ClientTable.clientUuid],
-                it[ClientTable.minecraftUuid]?.let { uuid -> UUID.fromString(uuid) },
-                it[ClientTable.minecraftUsername],
-                it[ClientTable.supportsComponents]
-            )
-            clientCache.put(cachedClient.clientUuid, cachedClient)
-            cachedClient
-        }
+        }.get().map { cacheAndReturn(it, it[ClientTable.clientUuid]) }
     }
-
-    data class CachedClient(
-        val clientUuid: String,
-        val minecraftUuid: UUID?,
-        val minecraftUsername: String,
-        val supportsComponents: Boolean
-    )
 }

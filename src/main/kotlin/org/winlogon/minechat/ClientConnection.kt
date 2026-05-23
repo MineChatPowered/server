@@ -9,7 +9,7 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
 
 import org.bukkit.Bukkit
-import org.winlogon.minechat.storage.ClientStorage.CachedClient
+import org.winlogon.minechat.storage.CachedClient
 import org.winlogon.minechat.storage.BanStorage.BanInfo
 
 import java.io.DataInputStream
@@ -85,6 +85,7 @@ class ClientConnection(
         val config = plugin.mineChatConfig
         keepAliveIntervalSec = config.keepAliveSeconds.toLong()
         keepAliveTimeoutMs = keepAliveIntervalSec * 1000
+        socket.soTimeout = keepAliveTimeoutMs.toInt()
 
         // Schedule periodic PING messages based on config
         scheduledExecutor.scheduleAtFixedRate({
@@ -119,77 +120,81 @@ class ClientConnection(
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastPacketTime > keepAliveTimeoutMs) {
                     logger.warning("Client connection timed out after ${keepAliveTimeoutMs}ms of inactivity")
-                    break // Terminate connection
-                }
-
-                // Read the framing layer
-                val decompressedLen = reader.readInt()
-                val compressedLen = reader.readInt()
-                logger.fine("Read frame header: decompressedLen=$decompressedLen, compressedLen=$compressedLen")
-
-                if (decompressedLen <= 0 || compressedLen <= 0) {
-                    logger.warning("Received non-positive frame size. Terminating connection.")
                     break
                 }
-
-                // Validate frame size limit (Section 4.5)
-                if (decompressedLen > MAX_FRAME_SIZE || compressedLen > MAX_FRAME_SIZE) {
-                    logger.warning("Frame size exceeds maximum allowed (${MAX_FRAME_SIZE} bytes). Terminating connection.")
-                    break
-                }
-
-                // Update last packet time after successful read
-                lastPacketTime = currentTime
-
-                val compressed = ByteArray(compressedLen)
-                reader.readFully(compressed)
-                logger.fine("Read compressed data: ${compressed.size} bytes")
-
-                // Log compressed bytes hex for debugging
-                val compressedHex = compressed.take(32).joinToString("") { "%02X".format(it) }
-                logger.fine("Compressed hex (first 32 bytes): $compressedHex")
 
                 try {
-                    logger.fine("Decompressing ${compressed.size} bytes to expected $decompressedLen bytes...")
-                    val decompressed: ByteArray
+                    // Read the framing layer
+                    // [decompressed_size: i32][compressed_size: i32][payload]
+                    val decompressedLen = reader.readInt()
+                    val compressedLen = reader.readInt()
+                    logger.fine("Read frame header: decompressedLen=$decompressedLen, compressedLen=$compressedLen")
+
+                    if (decompressedLen <= 0 || compressedLen <= 0) {
+                        // Negative or zero size terminates
+                        logger.warning("Received non-positive frame size. Terminating connection.")
+                        break
+                    }
+
+                    // Enforce 1 MiB maximum frame size recommendation (Section 4.5)
+                    if (decompressedLen > MAX_FRAME_SIZE || compressedLen > MAX_FRAME_SIZE) {
+                        logger.warning("Frame size exceeds maximum allowed (${MAX_FRAME_SIZE} bytes). Terminating connection.")
+                        break
+                    }
+
+                    lastPacketTime = currentTime
+
+                    val compressed = ByteArray(compressedLen)
+                    reader.readFully(compressed)
+                    logger.fine("Read compressed data: ${compressed.size} bytes")
+
+                    val compressedHex = compressed.take(32).joinToString("") { "%02X".format(it) }
+                    logger.fine("Compressed hex (first 32 bytes): $compressedHex")
+
                     try {
-                        decompressed = Zstd.decompress(compressed, decompressedLen)
-                    } catch (t: Throwable) {
-                        logger.log(Level.SEVERE, "Decompression failed: ${t.javaClass.name}: ${t.message}", t)
-                        break
-                    }
-                    logger.fine("Decompression complete: ${decompressed.size} bytes")
+                        logger.fine("Decompressing ${compressed.size} bytes to expected $decompressedLen bytes...")
+                        val decompressed: ByteArray
+                        try {
+                            // zstd compression is mandatory after CBOR (Section 4.2)
+                            decompressed = Zstd.decompress(compressed, decompressedLen)
+                        } catch (t: Throwable) {
+                            logger.log(Level.SEVERE, "Decompression failed: ${t.javaClass.name}: ${t.message}", t)
+                            break
+                        }
+                        logger.fine("Decompression complete: ${decompressed.size} bytes")
 
-                    if (decompressed.size != decompressedLen) {
-                        logger.warning("Decompressed size mismatch. Expected $decompressedLen, got ${decompressed.size}. Terminating connection.")
-                        break
-                    }
+                        // Verify actual size matches declared header (Section 4)
+                        if (decompressed.size != decompressedLen) {
+                            logger.warning("Decompressed size mismatch. Expected $decompressedLen, got ${decompressed.size}. Terminating connection.")
+                            break
+                        }
 
-                    val hexPreview = decompressed.take(32).joinToString("") { "%02X".format(it) }
-                    logger.fine("Decompressed CBOR: len=${decompressed.size}, hex=$hexPreview")
+                        val hexPreview = decompressed.take(32).joinToString("") { "%02X".format(it) }
+                        logger.fine("Decompressed CBOR: len=${decompressed.size}, hex=$hexPreview")
 
-                    val mineChatPacket = try {
-                        CBOR.decodeFromByteArray(MineChatPacket, decompressed)
+                        // CBOR-encoded with integer map keys (Section 4.1)
+                        val mineChatPacket = try {
+                            CBOR.decodeFromByteArray(MineChatPacket, decompressed)
+                        } catch (e: Exception) {
+                            logger.log(Level.SEVERE, "CBOR deserialization failed: ${e.message}", e)
+                            e.printStackTrace()
+                            break
+                        }
+
+                        logger.fine("Decoded packet: type=${mineChatPacket.packetType}, payloadClass=${mineChatPacket.payload::class.java.simpleName}")
+
+                        lastPacketTime = System.currentTimeMillis()
+
+                        handlePacketType(mineChatPacket)
                     } catch (e: Exception) {
-                        logger.log(Level.SEVERE, "CBOR deserialization failed: ${e.message}", e)
+                        logger.severe("Error in packet processing: ${e.message}")
                         e.printStackTrace()
                         break
                     }
-
-                    logger.fine("Decoded packet: type=${mineChatPacket.packetType}, payloadClass=${mineChatPacket.payload::class.java.simpleName}")
-
-                    // Update last packet time for any received packet
-                    lastPacketTime = System.currentTimeMillis()
-
-                    handlePacketType(mineChatPacket)
-                } catch (e: Exception) {
-                    logger.severe("Error in packet processing: ${e.message}")
-                    e.printStackTrace()
-                    break
+                } catch (_: SocketTimeoutException) {
+                    continue
                 }
             }
-        } catch (_: SocketTimeoutException) {
-            // This is expected due to keep-alive timeout checking, continue loop
         } catch (_: EOFException) {
             // Client disconnected normally - this is expected behavior
             logger.info("Client disconnected")
@@ -208,6 +213,8 @@ class ClientConnection(
         }
     }
 
+    // Dispatch by packet type ID per spec Section 8.
+    // Each known type maps to a specific sealed subclass of PacketPayload.
     fun handlePacketType(mineChatPacket: MineChatPacket) {
         when (mineChatPacket.packetType) {
             PacketTypes.LINK -> {
@@ -250,53 +257,23 @@ class ClientConnection(
         sendMessage(PacketTypes.PING, PingPayload(timestamp_ms = timestamp))
     }
 
-    private fun sendMessage(packetType: Int, payload: LinkOkPayload) {
+    private fun sendMessage(packetType: Int, payload: PacketPayload) {
         try {
-            val mineChatPacket = createPacket(packetType, payload)
-            sendPacket(mineChatPacket)
+            sendPacket(MineChatPacket(packetType, payload))
         } catch (e: Exception) {
-            logger.warning("Error sending LinkOkPayload: ${e.message}")
+            logger.log(Level.WARNING, "Error sending ${payload::class.simpleName}: ${e.message}", e)
         }
-    }
-
-    private fun sendMessage(packetType: Int, payload: AuthOkPayload) {
-        try {
-            val mineChatPacket = createPacket(packetType, payload)
-            sendPacket(mineChatPacket)
-        } catch (e: Exception) {
-            logger.log(Level.WARNING, "Error sending AuthOkPayload: ${e.message}", e)
-        }
-    }
-
-    private fun sendMessage(packetType: Int, payload: PingPayload) {
-        try {
-            val mineChatPacket = createPacket(packetType, payload)
-            sendPacket(mineChatPacket)
-        } catch (e: Exception) {
-            logger.log(Level.WARNING, "Error sending PingPayload: ${e.message}", e)
-        }
-    }
-
-    private fun sendMessage(packetType: Int, payload: PongPayload) {
-        try {
-            val mineChatPacket = createPacket(packetType, payload)
-            sendPacket(mineChatPacket)
-        } catch (e: Exception) {
-            logger.log(Level.WARNING, "Error sending PongPayload: ${e.message}", e)
-        }
-    }
-
-    private fun <T : PacketPayload> createPacket(packetType: Int, payload: T): MineChatPacket {
-        return MineChatPacket(packetType, payload)
     }
 
     fun sendPacket(mineChatPacket: MineChatPacket) {
         writerLock.lock()
         try {
+            // CBOR encode the packet
             logger.fine("sendPacket: serializing packetType=${mineChatPacket.packetType}")
             val serialized = CBOR.encodeToByteArray(MineChatPacket, mineChatPacket)
             logger.fine("sendPacket: serialized ${serialized.size} bytes")
 
+            // zstd-compress the payload
             val compressed = Zstd.compress(serialized)
             logger.fine("sendPacket: compressed to ${compressed.size} bytes")
 
@@ -304,13 +281,14 @@ class ClientConnection(
                 throw IllegalArgumentException("Packet too large")
             }
 
+            // Write the full framed header + payload
             writer.writeInt(serialized.size)
             writer.writeInt(compressed.size)
             writer.write(compressed)
             writer.flush()
             logger.info("sendPacket: sent packetType=${mineChatPacket.packetType}")
         } catch (e: Exception) {
-            logger.severe("sendPacket failed: ${e.message}")
+            logger.log(Level.SEVERE, "sendPacket failed: ${e.message}", e)
             e.printStackTrace()
             throw e
         } finally {
@@ -476,6 +454,19 @@ class ClientConnection(
         }
     }
 
+    private fun parseComponent(format: String, content: String): Component {
+        return try {
+            when (format) {
+                "commonmark" -> plugin.miniMessage.deserialize(content)
+                "components" -> GsonComponentSerializer.gson().deserialize(content)
+                else -> Component.text(content)
+            }
+        } catch (e: Exception) {
+            logger.warning("Failed to parse $format: ${e.message}")
+            Component.text(content)
+        }
+    }
+
     private fun handleChat(payload: ChatMessagePayload) {
         if (this.client == null) return
         if (!capabilitiesReceived) {
@@ -492,35 +483,9 @@ class ClientConnection(
 
         // Get the username for prefixing
         val username = this.client?.minecraftUsername ?: return
-
-        // Process the chat message
-        val content = payload.content
-
-        if (format == "commonmark") {
-            // Parse commonmark and send to Minecraft
-            val component = try {
-                plugin.miniMessage.deserialize(content)
-            } catch (e: Exception) {
-                logger.warning("Failed to parse MiniMessage: ${e.message}")
-                Component.text(content)
-            }
-
-            broadcastMinecraft(formatPrefixed(component, username))
-            // Send unprefixed component to MineChat clients (source = "minechat")
-            plugin.broadcastChatMessage(format, content, component, this, source = "minechat")
-        } else if (format == "components") {
-            // Parse JSON component format and send to Minecraft
-            val component = try {
-                GsonComponentSerializer.gson().deserialize(content)
-            } catch (e: Exception) {
-                logger.warning("Failed to parse JSON component: ${e.message}")
-                Component.text(content)
-            }
-
-            broadcastMinecraft(formatPrefixed(component, username))
-            // Send unprefixed component to MineChat clients (source = "minechat")
-            plugin.broadcastChatMessage(format, content, component, this, source = "minechat")
-        }
+        val component = parseComponent(format, payload.content)
+        broadcastMinecraft(formatPrefixed(component, username))
+        plugin.broadcastChatMessage(format, payload.content, component, this, source = "minechat")
     }
 
     private fun handlePing(payload: PingPayload) {

@@ -18,10 +18,6 @@ import java.util.concurrent.Callable
 
 class DatabaseManager(private val plugin: JavaPlugin) {
 
-    companion object {
-        private const val TIMEOUT_SECONDS = 30L
-    }
-
     private val database: Database
 
     init {

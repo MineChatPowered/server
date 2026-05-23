@@ -35,7 +35,10 @@ import javax.net.ssl.X509TrustManager
 import java.security.cert.X509Certificate
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.ExperimentalSerializationApi
+import java.util.logging.Level
 import javax.net.ssl.KeyManager
+
+const val TLS_VERSION = "TLSv1.3"
 
 class MineChatPlugin : JavaPlugin(), PluginServices {
     private var serverSocket: ServerSocket? = null
@@ -102,6 +105,7 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
             mineChatConfig = MineChatConfig()
         }
 
+        // --- Database initialization logic ---
         databaseManager = DatabaseManager(this)
         databaseManager.createTables()
 
@@ -112,64 +116,10 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
 
         muteStorage.cleanExpired()
 
-        val tls = mineChatConfig.tls
-
         CommandRegister(this).registerCommands()
 
-        val keystoreFile = File(dataFolder, tls.keystore)
-        val keystorePassword = tls.keystorePassword.toCharArray()
 
-        // Generate keystore if it doesn't exist
-        if (!keystoreFile.exists()) {
-            logger.info("Generating TLS certificate for MineChat server...")
-            try {
-                CertificateGenerator.generateKeystore(
-                    keystoreFile.toPath(),
-                    keystorePassword,
-                    commonName = "MineChat Server"
-                )
-                logger.info("TLS certificate generated successfully: ${keystoreFile.absolutePath}")
-                logger.warning("IMPORTANT: Clients will need to re-link due to the new certificate.")
-            } catch (e: Exception) {
-                logger.severe("Failed to generate TLS certificate: ${e.message}")
-                e.printStackTrace()
-                return
-            }
-        }
-
-        try {
-            val keyStore = CertificateGenerator.loadKeystore(keystoreFile.toPath(), keystorePassword)
-                ?: throw IllegalStateException("Failed to load keystore")
-
-            val keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
-            keyManagerFactory.init(keyStore, keystorePassword)
-
-            val delegateKeyManager = keyManagerFactory.keyManagers.filterIsInstance<X509KeyManager>().firstOrNull()
-                ?: throw IllegalStateException("No X509KeyManager found")
-
-            val trustManager = object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<out X509Certificate>, authType: String) {}
-                override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-            }
-
-            val sslContext = SSLContext.getInstance("TLSv1.3")
-            sslContext.init(arrayOf<KeyManager>(delegateKeyManager), arrayOf<TrustManager>(trustManager), null)
-
-            val sslServerSocketFactory = sslContext.serverSocketFactory
-            serverSocket = sslServerSocketFactory.createServerSocket(mineChatConfig.port)
-
-            (serverSocket as SSLServerSocket).apply {
-                enabledProtocols = arrayOf("TLSv1.3")
-            }
-
-            logger.info("MineChat server started with TLS 1.3 on port ${mineChatConfig.port}")
-        } catch (e: Exception) {
-            logger.severe("MineChat server cannot start: Failed to initialize TLS: ${e.message}")
-            logger.severe("If this is a certificate error, delete the keystore file and restart to regenerate.")
-            e.printStackTrace()
-            return
-        }
+        preparePluginKeystores()
 
         isServerRunning = true
 
@@ -185,7 +135,7 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
                     }
                 } catch (e: Exception) {
                     if (!isServerRunning) break
-                    logger.warning("Error accepting client: ${e.message}")
+                    logger.log(Level.WARNING, "Error accepting client", e)
                 }
             }
             logger.info("MineChat server socket thread stopped.")
@@ -231,22 +181,32 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
 
     override fun onDisable() {
         logger.info("Disabling MineChatPlugin")
+
+        // Server teardown logic
         isServerRunning = false
         serverThread?.interrupt()
         serverSocket?.close()
-        connectedClients.forEach { it.sendSystemDisconnect(SystemDisconnectReason.SHUTDOWN, "Server is shutting down.") }
-        //if (::linkCodeStorage.isInitialized) {
+
+        // Disconnect all clients
+        connectedClients.forEach {
+            it.sendSystemDisconnect(SystemDisconnectReason.SHUTDOWN, "Server is shutting down.")
+        }
+
+        // If databaseManager.createTables() fails, then the linkCodeStorage property is uninitialised.
+        // Since Kotlin would throw an UninitializedPropertyAccessException if it was the case, we need to detect it and
+        // guarantee that the cleanup of other allocated resources is completed.
+        if (::linkCodeStorage.isInitialized) {
             linkCodeStorage.close()
-        //}
+        }
         executorService.shutdownNow()
         try {
             executorService.awaitTermination(10, TimeUnit.SECONDS)
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
-        //if (::databaseManager.isInitialized) {
-            databaseManager.close()
-        //}
+
+        databaseManager.close()
+
         try {
             serverThread?.join()
         } catch (_: InterruptedException) {
@@ -283,4 +243,67 @@ class MineChatPlugin : JavaPlugin(), PluginServices {
     }
 
     fun removeClient(client: ClientConnection) = connectedClients.remove(client)
+
+    /** Loads the existing PKCS#12 keystore. Generates a keystore in the plugin data folder otherwise. */
+    fun preparePluginKeystores() {
+        val tls = mineChatConfig.tls
+
+        // --- TLS keystore init logic ---
+        val keystoreFile = File(dataFolder, tls.keystore)
+        val keystorePassword = tls.keystorePassword.toCharArray()
+
+        // Generate keystore if it doesn't exist
+        if (!keystoreFile.exists()) {
+            logger.info("Generating TLS certificate for MineChat server...")
+            try {
+                CertificateGenerator.generateKeystore(
+                    keystoreFile.toPath(),
+                    keystorePassword,
+                    commonName = "MineChat Server"
+                )
+                logger.info("TLS certificate generated successfully: ${keystoreFile.absolutePath}")
+                logger.warning("IMPORTANT: Clients will need to re-link due to the new certificate.")
+            } catch (e: Exception) {
+                logger.log(Level.SEVERE, "Failed to generate TLS certificate: ${e.message}", e)
+                e.printStackTrace()
+                return
+            }
+        }
+
+        try {
+            val keyStore = CertificateGenerator.loadKeystore(keystoreFile.toPath(), keystorePassword)
+                ?: throw IllegalStateException("Failed to load keystore")
+
+            val keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
+            keyManagerFactory.init(keyStore, keystorePassword)
+
+            val delegateKeyManager = keyManagerFactory.keyManagers.filterIsInstance<X509KeyManager>().firstOrNull()
+                ?: throw IllegalStateException("No X509KeyManager found")
+
+            // MineChat protocol spec expects Trust on First Use, so we're not doing mTLS.
+            val trustManager = object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out X509Certificate>, authType: String) {}
+                override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+            }
+
+            val sslContext = SSLContext.getInstance(TLS_VERSION)
+            sslContext.init(arrayOf<KeyManager>(delegateKeyManager), arrayOf<TrustManager>(trustManager), null)
+
+            val sslServerSocketFactory = sslContext.serverSocketFactory
+            serverSocket = sslServerSocketFactory.createServerSocket(mineChatConfig.port)
+
+            // Force TLSv1.3
+            (serverSocket as SSLServerSocket).apply {
+                enabledProtocols = arrayOf(TLS_VERSION)
+            }
+
+            logger.info("MineChat server started with $TLS_VERSION on port ${mineChatConfig.port}")
+        } catch (e: Exception) {
+            logger.log(Level.SEVERE, "MineChat server cannot start - failed to initialize TLS", e)
+            logger.severe("If this is a certificate error, delete the keystore file and restart to regenerate it.")
+            e.printStackTrace()
+            return
+        }
+    }
 }

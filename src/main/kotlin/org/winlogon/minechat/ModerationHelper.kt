@@ -3,10 +3,10 @@ package org.winlogon.minechat
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 
-import org.winlogon.minechat.storage.ClientStorage
+import org.winlogon.minechat.storage.CachedClient
 
 data class ClientResolution(
-    val storedClients: List<ClientStorage.CachedClient>,
+    val storedClients: List<CachedClient>,
     val connectedClients: List<ClientConnection>
 )
 

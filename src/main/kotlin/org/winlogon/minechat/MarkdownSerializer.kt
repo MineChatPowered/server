@@ -38,7 +38,7 @@ class MarkdownSerializer : ComponentSerializer<Component, Component, String> {
 
         // helper to find closing token start index, returns -1 if not found
         fun findClosing(startIndex: Int, token: String): Int =
-            input.indexOf(token, startIndex + token.length).also { if (it == -1) { /* not found */ } }
+            input.indexOf(token, startIndex + token.length)
 
         while (i < n) {
             // Try multi-char tokens first

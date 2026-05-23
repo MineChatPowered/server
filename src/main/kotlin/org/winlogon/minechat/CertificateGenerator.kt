@@ -13,7 +13,6 @@ import org.bouncycastle.operator.ContentSigner
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 
 import java.io.FileInputStream
-import java.io.OutputStream
 import java.math.BigInteger
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.Files
@@ -89,7 +88,7 @@ object CertificateGenerator {
 
         keystorePath.parent?.toFile()?.mkdirs()
 
-        FileOutputStream(keystorePath).use { fos ->
+        Files.newOutputStream(keystorePath).use { fos ->
             keyStore.store(fos, keystorePassword)
         }
 
@@ -199,13 +198,5 @@ object CertificateGenerator {
         }
     }
 
-    private class FileOutputStream(path: Path) : OutputStream() {
-        private val delegate = Files.newOutputStream(path)
 
-        override fun write(b: Int) = delegate.write(b)
-        override fun write(b: ByteArray) = delegate.write(b)
-        override fun write(b: ByteArray, off: Int, len: Int) = delegate.write(b, off, len)
-        override fun flush() = delegate.flush()
-        override fun close() = delegate.close()
-    }
 }
