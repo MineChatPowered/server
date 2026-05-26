@@ -19,6 +19,7 @@ class MineChatLoader : PluginLoader {
         "lamp" to "4.0.0-rc.16",
         "bouncycastle" to "1.78.1",
         "sqlite-jdbc" to "3.51.2.0",
+        "intellij-markdown" to "0.7.3",
     )
 
     override fun classloader(classpathBuilder: PluginClasspathBuilder) {
@@ -33,6 +34,7 @@ class MineChatLoader : PluginLoader {
             library("org.bouncycastle", "bcprov-jdk18on", versions["bouncycastle"]!!),
             library("org.bouncycastle", "bcpkix-jdk18on", versions["bouncycastle"]!!),
             library("org.xerial", "sqlite-jdbc", versions["sqlite-jdbc"]!!),
+            library("org.jetbrains", "markdown", versions["intellij-markdown"]!!),
         )
 
         val repositories = arrayOf(

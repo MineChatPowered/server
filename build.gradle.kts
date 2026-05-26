@@ -75,6 +75,7 @@ dependencies {
     compileOnly(libs.paper.api)
     compileOnly(libs.kotlin.reflect)
     compileOnly(libs.asynccraftr)
+    compileOnly(libs.markdown)
     compileOnly(libs.lamp.common)
     compileOnly(libs.lamp.bukkit)
     compileOnly(libs.bouncycastle.bcprov)

@@ -11,6 +11,7 @@ lamp = "4.0.0-rc.16"
 bouncycastle = "1.78.1"
 exposed = "1.1.1"
 sqlite-jdbc = "3.51.2.0"
+intellij-markdown = "0.7.3"
 
 [libraries]
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
@@ -31,3 +32,4 @@ bouncycastle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref 
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
+markdown = { module = "org.jetbrains:markdown", version.ref = "intellij-markdown" }

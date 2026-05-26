@@ -6,6 +6,13 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.ComponentSerializer
 
+import org.intellij.markdown.MarkdownElementTypes
+import org.intellij.markdown.MarkdownTokenTypes
+import org.intellij.markdown.ast.ASTNode
+import org.intellij.markdown.flavours.gfm.GFMElementTypes
+import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
+import org.intellij.markdown.parser.MarkdownParser
+
 class MarkdownSerializer : ComponentSerializer<Component, Component, String> {
     override fun deserialize(input: String): Component = parseMarkdown(input)
 
@@ -15,122 +22,93 @@ class MarkdownSerializer : ComponentSerializer<Component, Component, String> {
         return sb.toString()
     }
 
+    private val flavour = GFMFlavourDescriptor()
+    private val parser = MarkdownParser(flavour)
+
     private fun parseMarkdown(input: String): Component {
         if (input.isEmpty()) return Component.empty()
-
-        val builder = Component.text() // builder to accumulate components
-        val buffer = StringBuilder()
-        var i = 0
-        val n = input.length
-
-        fun flushBuffer() {
-            if (buffer.isNotEmpty()) {
-                builder.append(Component.text(buffer.toString()))
-                buffer.setLength(0)
-            }
-        }
-
-        fun appendDecorated(text: String, vararg decorations: TextDecoration) {
-            var comp = Component.text(text)
-            for (dec in decorations) comp = comp.decorate(dec)
-            builder.append(comp)
-        }
-
-        // helper to find closing token start index, returns -1 if not found
-        fun findClosing(startIndex: Int, token: String): Int =
-            input.indexOf(token, startIndex + token.length)
-
-        while (i < n) {
-            // Try multi-char tokens first
-            when {
-                input.startsWith("**", i) -> {
-                    val close = findClosing(i, "**")
-                    if (close != -1) {
-                        flushBuffer()
-                        val content = input.substring(i + 2, close)
-                        appendDecorated(content, TextDecoration.BOLD)
-                        i = close + 2
-                    } else {
-                        // treat literally
-                        buffer.append("**")
-                        i += 2
-                    }
-                }
-
-                input.startsWith("~~", i) -> {
-                    val close = findClosing(i, "~~")
-                    if (close != -1) {
-                        flushBuffer()
-                        val content = input.substring(i + 2, close)
-                        appendDecorated(content, TextDecoration.STRIKETHROUGH)
-                        i = close + 2
-                    } else {
-                        buffer.append("~~")
-                        i += 2
-                    }
-                }
-
-                // Single-char tokens
-                input[i] == '*' -> {
-                    // avoid matching "**" (already handled)
-                    val close = input.indexOf('*', i + 1)
-                    if (close != -1) {
-                        flushBuffer()
-                        val content = input.substring(i + 1, close)
-                        appendDecorated(content, TextDecoration.ITALIC)
-                        i = close + 1
-                    } else {
-                        buffer.append('*')
-                        i++
-                    }
-                }
-
-                input[i] == '`' -> {
-                    val close = input.indexOf('`', i + 1)
-                    if (close != -1) {
-                        flushBuffer()
-                        val content = input.substring(i + 1, close)
-                        // inline code — gray color in original
-                        builder.append(Component.text(content).color(NamedTextColor.GRAY))
-                        i = close + 1
-                    } else {
-                        buffer.append('`')
-                        i++
-                    }
-                }
-
-                else -> {
-                    buffer.append(input[i])
-                    i++
-                }
-            }
-        }
-
-        flushBuffer()
+        val tree = parser.buildMarkdownTreeFromString(input)
+        val builder = Component.text()
+        processChildren(tree, builder, input)
         return builder.build()
     }
 
+    private fun processChildren(node: ASTNode, builder: TextComponent.Builder, source: String) {
+        for (child in node.children) {
+            processNode(child, builder, source)
+        }
+    }
+
+    /**
+     * Processes a Markdown AST node by recursively building its children,
+     * then applying a transformation to the resulting component before appending it.
+     *
+     * @param node The AST node whose children will be processed.
+     * @param source The original Markdown source string used for text extraction.
+     * @param builder The parent component builder to append the result to.
+     * @param transform A function that applies styling or modifications to the built component.
+     */
+    private fun processStyledNode(
+        node: ASTNode,
+        source: String,
+        builder: TextComponent.Builder,
+        transform: (TextComponent) -> Component
+    ) {
+        val child = Component.text().also {
+            processChildren(node, it, source)
+        }.build()
+
+        builder.append(transform(child))
+    }
+
+    private fun processNode(node: ASTNode, builder: TextComponent.Builder, source: String) {
+        when (node.type) {
+            MarkdownElementTypes.STRONG ->
+                processStyledNode(node, source, builder) {
+                    it.decorate(TextDecoration.BOLD)
+                }
+
+            MarkdownElementTypes.EMPH ->
+                processStyledNode(node, source, builder) {
+                    it.decorate(TextDecoration.ITALIC)
+                }
+
+            GFMElementTypes.STRIKETHROUGH ->
+                processStyledNode(node, source, builder) {
+                    it.decorate(TextDecoration.STRIKETHROUGH)
+                }
+
+            MarkdownElementTypes.CODE_SPAN ->
+                processStyledNode(node, source, builder) {
+                    it.color(NamedTextColor.GRAY)
+                }
+
+            MarkdownTokenTypes.TEXT -> {
+                val markdownText = source.substring(node.startOffset, node.endOffset)
+                builder.append(Component.text(markdownText))
+            }
+
+            else -> processChildren(node, builder, source)
+        }
+    }
+
     private fun serializeComponent(component: Component, sb: StringBuilder) {
-        // If this is a TextComponent, write markers for active decorations
         if (component is TextComponent) {
             val bold = component.hasDecoration(TextDecoration.BOLD)
             val italic = component.hasDecoration(TextDecoration.ITALIC)
             val strike = component.hasDecoration(TextDecoration.STRIKETHROUGH)
 
-            // openers (fixed order)
             if (bold) sb.append("**")
             if (italic) sb.append("*")
             if (strike) sb.append("~~")
 
             sb.append(component.content())
 
-            // closers in reverse order
             if (strike) sb.append("~~")
             if (italic) sb.append("*")
             if (bold) sb.append("**")
         }
 
-        // serialize children
         for (child in component.children()) {
             serializeComponent(child, sb)
         }
